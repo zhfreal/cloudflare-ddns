@@ -11,6 +11,7 @@ import time
 import urllib.parse
 import requests
 
+
 class CloudFlareError(Exception):
     """
     Base exception for CloudFlare module
@@ -30,6 +31,7 @@ class RecordNotFound(CloudFlareError):
     Raised when a specified record is not found for a zone from CloudFlare
     """
     pass
+
 
 class CloudFlare:
     """
@@ -205,7 +207,7 @@ class CloudFlare:
                 f"Failed to get dns records for zone: \"{self.domain}\", \'{t_result_dict}\'")
         self.dns_records = t_result_dict['result']
 
-    def __create_one_record__(self, dns_type, name, t_result_dict, **kwargs):
+    def __create_one_record__(self, dns_type, name, content, **kwargs):
         """
         Create a dns record
         :param dns_type:
@@ -217,7 +219,7 @@ class CloudFlare:
         data = {
             'type': dns_type,
             'name': name,
-            'content': t_result_dict
+            'content': content
         }
         if kwargs.get('ttl') and kwargs['ttl'] != 1:
             data['ttl'] = kwargs['ttl']
@@ -250,10 +252,6 @@ class CloudFlare:
         """
         name = name.lower()
         dns_type = dns_type.upper()
-        # strip and remove duplicated item
-        content_list = [str(content).strip().lower()
-                        for content in content_list]
-        content_list = list(set(content_list))
         data = {
             'type': dns_type,
             'name': name,
@@ -343,9 +341,9 @@ class CloudFlare:
         name = name.lower()
         dns_type = dns_type.upper()
         # strip and remove duplicated item
-        content_list = [str(content).strip().lower()
-                        for content in content_list]
-        content_list = list(set(content_list))
+        # content_list = [str(content).strip().lower()
+        #                 for content in content_list]
+        # content_list = list(set(content_list))
         t_records = self.get_records(name, dns_type)
         # check records exist or not,
         #    keep the content and its record id.
@@ -378,9 +376,9 @@ class CloudFlare:
         name = name.lower()
         dns_type = dns_type.upper()
         # strip and remove duplicated item
-        content_list = [str(content).strip().lower()
-                        for content in content_list]
-        content_list = list(set(content_list))
+        # content_list = [str(content).strip().lower()
+        #                 for content in content_list]
+        # content_list = list(set(content_list))
         t_index = 0
         t_d_dict = {}
         while t_index < len(self.dns_records):
@@ -409,9 +407,9 @@ class CloudFlare:
         name = name.lower()
         dns_type = dns_type.upper()
         # strip and remove duplicated item
-        content_list = [str(content).strip().lower()
-                        for content in content_list]
-        content_list = list(set(content_list))
+        # content_list = [str(content).strip().lower()
+        #                 for content in content_list]
+        # content_list = list(set(content_list))
         t_content_for_loop = [item for item in content_list]
         t_i_old_r = 0
         t_updated_C = []
@@ -582,15 +580,15 @@ def main():
     cf = CloudFlare(email=args.email, api_key=args.api_key, domain=t_domain)
     if args.u_domain:
         if args.ipv4_addr and len(args.ipv4_addr) > 0:
-            t_u, t_c, t_d = cf.update_records("A", t_domain, args.ipv4_addr,
+            t_u, t_c, t_d = cf.update_records(t_domain, "A", args.ipv4_addr,
                                               ttl=args.ttl, proxied=args.proxied)
             print_logs(t_u, t_c, t_d, [])
         if args.ipv6_addr and len(args.ipv6_addr) > 0:
-            t_u, t_c, t_d = cf.update_records("AAAA", t_domain, args.ipv6_addr,
+            t_u, t_c, t_d = cf.update_records(t_domain, "AAAA", args.ipv6_addr,
                                               ttl=args.ttl, proxied=args.proxied)
             print_logs(t_u, t_c, t_d, [])
         if args.cname and len(args.cname) > 0:
-            t_u, t_c, t_d = cf.update_records("CNAME", t_domain, [args.cname],
+            t_u, t_c, t_d = cf.update_records(t_domain, "CNAME", [args.cname],
                                               ttl=args.ttl, proxied=args.proxied)
             print_logs(t_u, t_c, t_d, [])
     if args.a_domain:
