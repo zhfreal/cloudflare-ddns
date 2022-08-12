@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 CloudFlare dns tools.
 """
