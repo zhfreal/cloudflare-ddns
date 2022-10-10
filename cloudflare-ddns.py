@@ -11,6 +11,8 @@ import time
 import urllib.parse
 import requests
 
+VERSION = "v1.0"
+
 
 class CloudFlareError(Exception):
     """
@@ -518,8 +520,9 @@ def print_logs(t_u: list, t_c: list, t_d: list, t_k: list):
 
 
 def main():
-    print("cloudflare-ddns a DDNS helper for Cloudflare.")
-    print("Create, delete or update dns record for dns type \"A|AAAA|CNAME\".")
+    print(f"cloudflare-ddns {VERSION}")
+    print("  - a DDNS helper for Cloudflare.")
+    print("  - create, delete or update dns record for dns type \"A|AAAA|CNAME\".")
     print("")
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", '--email', action="store",
@@ -545,7 +548,11 @@ def main():
                         dest="ttl", type=int, help="ttl for record")
     parser.add_argument('--proxied', action="store", default=False,
                         dest="proxied", type=str2bool, help="It should be proxied")
+    parser.add_argument("-v", "--version", action="store_true",
+                        dest="version",  default=False, help="show version")
     args = parser.parse_args()
+    if args.version:
+        sys.exit(0)
     if not args.email or len(args.email) == 0:
         print("No email!")
         sys.exit(1)
@@ -625,6 +632,7 @@ def main():
                 t_d = cf.delete_records(t_domain, t_type, [],
                                         ttl=args.ttl, proxied=args.proxied)
                 print_logs([], [], t_d, [])
+    print("")
 
 
 if __name__ == "__main__":
