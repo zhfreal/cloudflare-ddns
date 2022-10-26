@@ -11,7 +11,7 @@ import time
 import urllib.parse
 import requests
 
-VERSION = "v1.1"
+VERSION = "v1.1.1"
 
 
 class CloudFlareError(Exception):
@@ -230,6 +230,9 @@ class CloudFlare:
             data['ttl'] = self.ttl
         if kwargs.get('proxied') and isinstance(kwargs['proxied'], bool):
             data['proxied'] = kwargs['proxied']
+            # if record is proxied, then ttl is automatically and the value is 1
+            if data['proxied']:
+                data['ttl'] = 1
         else:
             data['proxied'] = self.proxied
         t_succ, t_result_dict = self.__request__(
@@ -265,6 +268,9 @@ class CloudFlare:
             data['ttl'] = kwargs['ttl']
         if kwargs.get('proxied') and isinstance(kwargs['proxied'], bool):
             data['proxied'] = kwargs['proxied']
+            # if record is proxied, then ttl is automatically and the value is 1
+            if data['proxied']:
+                data['ttl'] = 1
         else:
             data['proxied'] = self.proxied
         t_succ, t_result_dict = self.__request__(
@@ -381,6 +387,9 @@ class CloudFlare:
             t_new_ttl = kwargs["ttl"]
         if "proxied" in kwargs:
             t_new_proxied = kwargs["proxied"]
+            # if record is proxied, then ttl is automatically and the value is 1
+            if t_new_proxied:
+                t_new_ttl = 1
         t_exists_dict_keys_list = deepcopy(list(t_exists_dict.keys()))
         for t_name, t_dns_type, t_content in t_exists_dict_keys_list:
             t_s_content = t_exists_dict[(t_name, t_dns_type, t_content)]
@@ -528,6 +537,9 @@ class CloudFlare:
             t_new_ttl = kwargs["ttl"]
         if "proxied" in kwargs:
             t_new_proxied = kwargs["proxied"]
+            # if record is proxied, then ttl is automatically and the value is 1
+            if t_new_proxied:
+                t_new_ttl = 1
         t_exists_dict_keys_list = deepcopy(list(t_exists_dict.keys()))
         for t_name, t_dns_type, t_content in t_exists_dict_keys_list:
             t_s_content = t_exists_dict[(t_name, t_dns_type, t_content)]
