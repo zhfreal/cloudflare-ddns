@@ -353,13 +353,13 @@ class CloudFlare:
         t_records, _ = self.get_records(name, dns_type)
         # check records exist or not,
         #    keep the content and its record id.
-        t_exist_dict = {}
+        t_exists_dict = {}
         t_non_exist_content = []
         for t_content in content_list:
             t_found = False
             for t_record in t_records.values():
                 if t_record["content"] == t_content:
-                    t_exist_dict[(name, dns_type, t_content)] = t_record
+                    t_exists_dict[(name, dns_type, t_content)] = t_record
                     t_found = True
                 break
             if not t_found:
@@ -371,7 +371,44 @@ class CloudFlare:
                 dns_type, name, t_content, **kwargs)
             t_created_dict[(name, dns_type, t_content)] = t_result
             time.sleep(0.5)
-        return t_created_dict, t_exist_dict
+        # patches
+        # update ttl and proxied for exists record according kwargs
+        #     ttl and proxied from kwargs
+        t_updated_dict = {}
+        t_new_ttl = None
+        t_new_proxied = None
+        if "ttl" in kwargs:
+            t_new_ttl = kwargs["ttl"]
+        if "proxied" in kwargs:
+            t_new_proxied = kwargs["proxied"]
+        t_exists_dict_keys_list = deepcopy(list(t_exists_dict.keys()))
+        for t_name, t_dns_type, t_content in t_exists_dict_keys_list:
+            t_s_content = t_exists_dict[(t_name, t_dns_type, t_content)]
+            t_id = t_s_content["id"]
+            t_old_ttl = t_s_content["ttl"]
+            t_old_proxied = t_s_content["proxied"]
+            t_o_proxiable = t_s_content["proxiable"]
+            t_kwargs = {}
+            # if ttl exists in kwargs and it's not the same with target ttl from server
+            if t_new_ttl is not None and t_new_ttl != t_old_ttl:
+                t_kwargs["ttl"] = t_new_ttl
+            # if target is proxiable, and proxied present in kwargs and it's not the same with target proxied.
+            if t_o_proxiable and t_new_proxied is not None and t_new_proxied != t_old_proxied:
+                t_kwargs["proxied"] = t_new_proxied
+            # if t_kwargs is not empty, update ttl/proxied to remote
+            if len(t_kwargs.keys()) > 0:
+                # refill ttl and proxied in t_kwargs with old value (which from remote server) for unknown error occured during update
+                if "ttl" not in t_kwargs:
+                    t_kwargs["ttl"] = t_old_ttl
+                if "proxied" not in t_kwargs:
+                    t_kwargs["proxied"] = t_old_proxied
+                self.__update_record_by_id__(
+                    t_id, t_name, t_dns_type, t_content, **t_kwargs)
+                # update t_updated_dict, and delete from t_exists_dict
+                t_updated_dict[(t_name, t_dns_type, t_content)
+                               ] = self.dns_records[t_id]
+                del t_exists_dict[(t_name, t_dns_type, t_content)]
+        return t_created_dict, t_updated_dict, t_exists_dict
 
     def delete_records(self, name, dns_type, content_list: list = [], **kwargs):
         """
@@ -428,35 +465,36 @@ class CloudFlare:
         t_created_dict = {}
         t_deleted_dict = {}
         # loop for self.dns_records
-        t_id_dict_from_server, t_name_t_c_dict_from_ser = self.get_records(
+        t_id_content_dict_server, t_name_type_content_id_dict_server = self.get_records(
             name, dns_type)
-        t_name_t_c_list_from_ser = list(t_name_t_c_dict_from_ser.keys())
+        t_name_t_c_list_from_ser = list(
+            t_name_type_content_id_dict_server.keys())
         # scan content list, find all exist records and non-exist records
         for t_content in content_list:
             if (name, dns_type, t_content) in t_name_t_c_list_from_ser:
                 t_c_exists_dict[(name, dns_type, t_content)
-                                ] = t_name_t_c_dict_from_ser[(name, dns_type, t_content)]
+                                ] = t_name_type_content_id_dict_server[(name, dns_type, t_content)]
                 t_exists_dict[(name, dns_type, t_content)
-                              ] = t_id_dict_from_server[t_name_t_c_dict_from_ser[(name, dns_type, t_content)]]
+                              ] = t_id_content_dict_server[t_name_type_content_id_dict_server[(name, dns_type, t_content)]]
             else:
                 t_c_not_exists_list.append(t_content)
         # scan the record from server, find the irrelevant records
         for t_name, t_dns_type, t_content in t_name_t_c_list_from_ser:
             if t_content not in content_list:
-                t_id = t_name_t_c_dict_from_ser[(
+                t_id = t_name_type_content_id_dict_server[(
                     t_name, t_dns_type, t_content)]
-                t_irrelevant_records[t_id] = t_id_dict_from_server[t_id]
+                t_irrelevant_records[t_id] = t_id_content_dict_server[t_id]
         # if there are new content for create/update
         # we update the irrelevant records from server and local cache according to remains in the t_c_not_exists_list
         # if we don't have enough irrelevant records for update, and we create new records
         # if we have more irrelevant record we delete them.
-        t_keys = list(t_irrelevant_records.keys())
+        t_keys = deepcopy(list(t_irrelevant_records.keys()))
         if len(t_c_not_exists_list) > 0 and len(t_keys) > 0:
             for t_id in t_keys:
                 t_content = t_c_not_exists_list[0]
                 # update the record in remote and local cache
                 t_result = self.__update_record_by_id__(
-                    t_id, name, dns_type, t_content)
+                    t_id, name, dns_type, t_content, **kwargs)
                 # update t_updated_dict
                 t_updated_dict[(name, dns_type, t_content)] = t_result
                 # delete from t_irrelevant_records
@@ -469,7 +507,7 @@ class CloudFlare:
         # we don't have enough irrelevant records and there are more contents for create
         if len(t_c_not_exists_list) > 0:
             t_created_dict, t_error_exists = self.create_records(
-                name, dns_type, t_c_not_exists_list)
+                name, dns_type, t_c_not_exists_list, **kwargs)
             # there should not be a exists list after create
             # if there are some records, raise a CloudFlareError
             if len(t_error_exists) > 0:
@@ -481,6 +519,42 @@ class CloudFlare:
             t_deleted_dict = self.delete_records(
                 name, dns_type, t_irrelevant_records.keys())
             t_irrelevant_records = {}
+        # patches
+        # update ttl and proxied for exists record according kwargs
+        #     ttl and proxied from kwargs
+        t_new_ttl = None
+        t_new_proxied = None
+        if "ttl" in kwargs:
+            t_new_ttl = kwargs["ttl"]
+        if "proxied" in kwargs:
+            t_new_proxied = kwargs["proxied"]
+        t_exists_dict_keys_list = deepcopy(list(t_exists_dict.keys()))
+        for t_name, t_dns_type, t_content in t_exists_dict_keys_list:
+            t_s_content = t_exists_dict[(t_name, t_dns_type, t_content)]
+            t_id = t_s_content["id"]
+            t_old_ttl = t_s_content["ttl"]
+            t_old_proxied = t_s_content["proxied"]
+            t_o_proxiable = t_s_content["proxiable"]
+            t_kwargs = {}
+            # if ttl exists in kwargs and it's not the same with target ttl from server
+            if t_new_ttl is not None and t_new_ttl != t_old_ttl:
+                t_kwargs["ttl"] = t_new_ttl
+            # if target is proxiable, and proxied present in kwargs and it's not the same with target proxied.
+            if t_o_proxiable and t_new_proxied is not None and t_new_proxied != t_old_proxied:
+                t_kwargs["proxied"] = t_new_proxied
+            # if t_kwargs is not empty, update ttl/proxied to remote
+            if len(t_kwargs.keys()) > 0:
+                # refill ttl and proxied in t_kwargs with old value (which from remote server) for unknown error occured during update
+                if "ttl" not in t_kwargs:
+                    t_kwargs["ttl"] = t_old_ttl
+                if "proxied" not in t_kwargs:
+                    t_kwargs["proxied"] = t_old_proxied
+                self.__update_record_by_id__(
+                    t_id, t_name, t_dns_type, t_content, **t_kwargs)
+                # update t_updated_dict, and delete from t_exists_dict
+                t_updated_dict[(t_name, t_dns_type, t_content)
+                               ] = self.dns_records[t_id]
+                del t_exists_dict[(t_name, t_dns_type, t_content)]
         return t_updated_dict, t_created_dict, t_deleted_dict, t_exists_dict
 
 
@@ -603,17 +677,17 @@ def main():
             print_logs(t_u, t_c, t_d, t_k)
     if args.a_domain:
         if args.ipv4_addr and len(args.ipv4_addr) > 0:
-            t_c, t_k = cf.create_records(t_domain, "A", args.ipv4_addr,
-                                         ttl=args.ttl, proxied=args.proxied)
+            t_c, t_u, t_k = cf.create_records(t_domain, "A", args.ipv4_addr,
+                                              ttl=args.ttl, proxied=args.proxied)
             print_logs([], t_c, [], t_k)
         if args.ipv6_addr and len(args.ipv6_addr) > 0:
-            t_c, t_k = cf.create_records(t_domain, "AAAA", args.ipv6_addr,
-                                         ttl=args.ttl, proxied=args.proxied)
+            t_c, t_u, t_k = cf.create_records(t_domain, "AAAA", args.ipv6_addr,
+                                              ttl=args.ttl, proxied=args.proxied)
             print_logs([], t_c, [], t_k)
         if args.cname and len(args.cname) > 0:
-            t_c, t_k = cf.create_records(t_domain, "CNAME", [args.cname],
-                                         ttl=args.ttl, proxied=args.proxied)
-            print_logs([], t_c, [], t_k)
+            t_c, t_u, t_k = cf.create_records(t_domain, "CNAME", [args.cname],
+                                              ttl=args.ttl, proxied=args.proxied)
+            print_logs(t_u, t_c, [], t_k)
     if args.d_domain:
         if args.ipv4_addr and len(args.ipv4_addr) > 0:
             t_d = cf.delete_records(t_domain, "A", args.ipv4_addr,
