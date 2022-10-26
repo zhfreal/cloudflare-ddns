@@ -11,7 +11,7 @@ import time
 import urllib.parse
 import requests
 
-VERSION = "v1.0"
+VERSION = "v1.1"
 
 
 class CloudFlareError(Exception):
