@@ -175,7 +175,7 @@ class CloudFlare:
                 t_try += 1
             except Exception as e:
                 return False, e
-        return False, e
+        return False, None
 
     @classmethod
     def get_zone_name(cls, domain: str, domain_class=-1):
