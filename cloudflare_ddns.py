@@ -744,22 +744,22 @@ def str2bool(v):
 def print_logs(t_u: list, t_c: list, t_d: list, t_k: list):
     if len(t_u) > 0:
         print("Update for:")
-        for t_i in t_u.keys():
+        for t_i in t_u:
             print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
             print(t_u[t_i])
     if len(t_c) > 0:
         print("Create for:")
-        for t_i in t_c.keys():
+        for t_i in t_c:
             print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
             print(t_c[t_i])
     if len(t_d) > 0:
         print("Delete for:")
-        for t_i in t_d.keys():
+        for t_i in t_d:
             print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
             print(t_d[t_i])
     if len(t_k) > 0:
         print("Keep for:")
-        for t_i in t_k.keys():
+        for t_i in t_k:
             print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
             print(t_k[t_i])
 
