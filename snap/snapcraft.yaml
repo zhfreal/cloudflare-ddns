@@ -1,0 +1,24 @@
+name: cloudflare-ddns
+base: core22
+version: '1.2.0'
+summary: An tool for manage dns records on cloudflare.com
+description: |
+  This tool can list domains, add update delete domains, list records, add and update delete records.
+grade: stable
+confinement: strict
+
+parts:
+  cloudflare-ddns:
+    plugin: python
+    source: .
+    build-packages:
+      - libffi-dev
+      - python3-cffi
+    python-packages:
+      - gevent
+      - requests
+
+apps:
+  cloudflare-ddns:
+    command: bin/cloudflare-ddns
+    plugs: [network, network-bind]
