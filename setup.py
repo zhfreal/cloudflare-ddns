@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
     name='cloudflare-ddns',
-    version="2.4.1",
+    version="2.5.0",
     author='zhfreal',
     author_email='zhfreal@gmail.com',
     description='util for dynu ddns domains and records',

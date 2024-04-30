@@ -452,6 +452,24 @@ class CloudFlare:
         self.__init_zones__(**kwargs)
         # self.__setup_zone__(**kwargs)
 
+    def list_zones(self, **kwargs):
+        """
+        List all zones
+        :return:
+        """
+        for key, _ in self.zones.items():
+            print(key)
+
+    def list_record_for_zone(self, zone: str, **kwargs):
+        """
+        List all records for a zone
+        :param zone:
+        :return:
+        """
+        self.__init_records_for_sub_domain__(zone, **kwargs)
+        for key, value in self.zones[zone]["records"].items():
+            print(f"{key}: {value}")
+
     def create_records(self, name, dns_type, content_list, **kwargs):
         """
         Create a dns record
@@ -804,6 +822,23 @@ def main():
     )
     cmd_group = parser.add_mutually_exclusive_group(required=False)
     cmd_group.add_argument(
+        "--list-zones",
+        action="store",
+        dest="list_zones",
+        default=False,
+        const=True,
+        nargs='?',
+        type=str2bool,
+        help="list all zones",
+    )
+    cmd_group.add_argument(
+        "--list-records",
+        action="store",
+        dest="list_records",
+        type=str,
+        help="list records for specific zone",
+    )
+    cmd_group.add_argument(
         "-u",
         "--update-record",
         action="append",
@@ -895,6 +930,8 @@ def main():
         "--proxied",
         action="store",
         default=False,
+        const=True,
+        nargs='?',
         dest="proxied",
         type=str2bool,
         help="It should be proxied",
@@ -936,27 +973,35 @@ def main():
     if not args.api_key or len(args.api_key) == 0:
         print("No API Key!")
         sys.exit(1)
+    # add, update and delete
     t_domains_list = []
-    t_add_records = 0
-    t_update_records = 0
-    t_delete_records = 0
+    t_list_zones = False
+    t_list_records = False
+    t_add_records = False
+    t_update_records = False
+    t_delete_records = False
     t_records_dict = {}
+    # for update records only
     t_raw_list = []
-    if args.u_domain and len(args.u_domain) > 0:
+    if args.list_zones:
+        t_list_zones = True
+    elif args.list_records and len(args.list_records) > 0:
+        t_list_records = True
+    elif args.u_domain and len(args.u_domain) > 0:
         t_domains_list = args.u_domain
-        t_update_records = 1
+        t_update_records = True
     elif args.a_domain and args.a_domain and len(args.a_domain) > 0:
         t_domains_list = args.a_domain
-        t_add_records = 1
+        t_add_records = True
     elif args.d_domain and len(args.d_domain) > 0:
         t_domains_list = args.d_domain
-        t_delete_records = 1
+        t_delete_records = True
     elif args.raw and len(args.raw) > 0:
         ### raw data like： name,dns_type,content,ttl,proxied
-        t_update_records = 1
+        t_update_records = True
         t_raw_list.extend(args.raw)
     elif args.raw_file and len(args.raw_file) > 0:
-        t_update_records = 1
+        t_update_records = True
         try:
             with open(args.raw_file, "r") as fp:
                 t_content_list = fp.readlines()
@@ -970,6 +1015,7 @@ def main():
         print("No valid cmd provided!")
         sys.exit(1)
     # resolve raw
+    # just for records update
     t_raw_list = list(set(t_raw_list))
     if len(t_raw_list) > 0:
         t_re_rules = re.compile("[;,|]+")
@@ -994,9 +1040,11 @@ def main():
                 sys.exit(1)
     # read raw-alias
     t_raw_alias_list = []
-    if args.raw_alias and len(args.raw_alias) > 0:
+    # just do while add update and delete records
+    if (t_add_records or t_update_records or t_delete_records) and args.raw_alias and len(args.raw_alias) > 0:
         t_raw_alias_list.extend(args.raw_alias)
-    if args.raw_alias_file and len(args.raw_alias_file) > 0:
+    # just do while add update and delete records
+    if (t_add_records or t_update_records or t_delete_records) and args.raw_alias_file and len(args.raw_alias_file) > 0:
         try:
             with open(args.raw_alias_file, "r") as fp:
                 t_content_list = fp.readlines()
@@ -1009,6 +1057,7 @@ def main():
     t_raw_alias_list = list(set(t_raw_alias_list))
     t_re_rules = re.compile("[;,|]+")
     t_raw_alias_resolved_list = []
+    # just do while add update and delete records
     for t_raw in t_raw_alias_list:
         t_raw = str(t_raw)
         # skip empty line
@@ -1034,7 +1083,8 @@ def main():
             sys.exit(1)
     # args.alias
     t_alias_list = []
-    if args.alias and len(args.alias) > 0:
+    # just do while add update and delete records
+    if (t_add_records or t_update_records or t_delete_records) and args.alias and len(args.alias) > 0:
         t_re_rules = re.compile("[;,|]+")
         for t_alias in args.alias:
             t_t_alias_list = t_re_rules.split(str(t_alias))
@@ -1042,7 +1092,7 @@ def main():
                 item.strip() for item in t_t_alias_list if len(item.strip()) > 0
             ]
             t_alias_list.extend(t_t_alias_list)
-    # splite domains in t_domains_list, while do "-a|-u|-d"
+    # split domains in t_domains_list, just do while add update and delete records
     if len(t_domains_list) > 0:
         t_n_domains_list = []
         t_re_rules = re.compile("[;,|]+")
@@ -1055,7 +1105,7 @@ def main():
         t_domains_list = list(set(t_n_domains_list))
         for r_domain in t_domains_list:
             t_domain = r_domain
-            if t_add_records == 1 or t_update_records == 1:
+            if t_add_records or t_update_records:
                 for (
                         t_alias,
                         t_dns_type,
@@ -1063,7 +1113,7 @@ def main():
                         t_ttl,
                         t_proxied,
                 ) in t_raw_alias_resolved_list:
-                    t_domain = t_alias + "." + r_domain
+                    t_domain = t_alias + "." + t_domain
                     t_dns_type = str(t_dns_type).upper()
                     # t_c is a prefix
                     if t_dns_type == "CNAME" and "." not in t_c:
@@ -1113,7 +1163,7 @@ def main():
                         )
                     )
                 if (
-                        t_delete_records == 1
+                        t_delete_records
                         and args.dns_type
                         and len(args.dns_type) > 0
                 ):
@@ -1127,7 +1177,7 @@ def main():
                         t_records_dict[t_domain].update(
                             gen_content_dict(t_dns_type, [], args.ttl, args.proxied)
                         )
-    # do data check
+    # do data check, just do while add update and delete records
     for t_records in t_records_dict.values():
         # CNAME can't work with A or AAAA
         if ("A" in t_records or "AAAA" in t_records) and "CNAME" in t_records:
@@ -1137,7 +1187,7 @@ def main():
         if "CNAME" in t_records and len(t_records["CNAME"]) > 1:
             print("CNAME can't have more than one records")
             sys.exit(1)
-        if t_add_records == 1 or t_update_records == 1:
+        if t_add_records or t_update_records:
             if (
                     ("A" not in t_records or len(t_records["A"]) == 0)
                     and ("AAAA" not in t_records or len(t_records["AAAA"]) == 0)
@@ -1157,11 +1207,15 @@ def main():
                 sys.exit(1)
     # do cloudflare api init
     cf = CloudFlare(email=args.email, api_key=args.api_key, domain="")
-    if t_update_records == 1:
+    if t_list_zones:
+        cf.list_zones()
+    elif t_list_records:
+        cf.list_record_for_zone(args.list_records)
+    elif t_update_records:
         cf.update_records_new(t_records_dict)
-    elif t_add_records == 1:
+    elif t_add_records:
         cf.create_records_new(t_records_dict)
-    elif t_delete_records == 1:
+    elif t_delete_records:
         cf.delete_records_new(t_records_dict)
     else:
         print("Invalid operation!")
