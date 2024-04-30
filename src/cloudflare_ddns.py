@@ -18,8 +18,6 @@ import urllib.parse
 import requests
 import re
 
-VERSION = "v2.4 - 20240403"
-
 valid_record_type = ("A", "AAAA", "CNAME")
 
 
@@ -782,7 +780,8 @@ def is_valid_dns_type(dns_type: str):
 
 
 def main():
-    print(f"cloudflare-ddns {VERSION}")
+    from src import __version__
+    print(f"cloudflare-ddns {__version__}")
     print("  - a DDNS helper for Cloudflare.")
     print('  - create, delete or update dns record for dns type "A|AAAA|CNAME".')
     print("")
