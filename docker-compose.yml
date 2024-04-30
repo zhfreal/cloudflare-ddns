@@ -1,0 +1,7 @@
+version: '3.8'
+
+services:
+  cloudflare-ddns:
+    build:
+      context: .
+      dockerfile: Dockerfile
