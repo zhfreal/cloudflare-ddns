@@ -277,8 +277,8 @@ class CloudFlare:
                 )
             for t_record in t_result_dict["result"]:
                 # escape other than A AAAA CNAME
-                if not is_valid_dns_type(t_record["type"]):
-                    continue
+                # if not is_valid_dns_type(t_record["type"]):
+                #     continue
                 if t_record["name"] not in dns_records:
                     dns_records[t_record["name"]] = {}
                 if t_record["type"] not in dns_records[t_record["name"]]:
@@ -286,6 +286,9 @@ class CloudFlare:
                 dns_records[t_record["name"]][t_record["type"]][t_record["content"]] = (
                     t_record["id"]
                 )
+                if "values" not in dns_records[t_record["name"]][t_record["type"]]:
+                    dns_records[t_record["name"]][t_record["type"]]["values"] = []
+                dns_records[t_record["name"]][t_record["type"]]["values"].append(t_record)
             if "result_info" not in t_result_dict:
                 raise CloudFlareError(
                     f"Failed to get dns records for zone: \"{zone_name}\", 'Got: \n{t_result_dict}'"
@@ -466,9 +469,14 @@ class CloudFlare:
         :param zone:
         :return:
         """
-        self.__init_records_for_sub_domain__(zone, **kwargs)
-        for key, value in self.zones[zone]["records"].items():
-            print(f"{key}: {value}")
+        zone_name = self.__get_zone_name__(zone)
+        self.__init_records_for_sub_domain__(zone_name, **kwargs)
+        for key, value in self.zones[zone_name]["records"].items():
+            if zone == zone_name or key == zone:
+                print(f"{key}: ")
+                for v in value.values():
+                    for t_v in v["values"]:
+                        print(t_v)
 
     def create_records(self, name, dns_type, content_list, **kwargs):
         """
