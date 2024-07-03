@@ -89,7 +89,8 @@ class CloudFlare:
         if kwargs.get("ttl") and isinstance(kwargs["ttl"], int) and kwargs["ttl"] >= 60:
             self.ttl = kwargs["ttl"]
         # set proxies for connection between local to cloudflare
-        self.http_proxies = CloudFlare.__get_http_proxies__(copy_proxy=True, **kwargs)
+        self.http_proxies = CloudFlare.__get_http_proxies__(
+            copy_proxy=True, **kwargs)
         # self.__setup_zone__()
         self.__init_zones__()
 
@@ -121,7 +122,8 @@ class CloudFlare:
         return t_proxies
 
     def __set_http_proxies__(self, **kwargs):
-        t_http_proxies = CloudFlare.__get_http_proxies__(copy_proxy=False, **kwargs)
+        t_http_proxies = CloudFlare.__get_http_proxies__(
+            copy_proxy=False, **kwargs)
         if len(t_http_proxies["http_proxy"]) > 0:
             self.http_proxies["http_proxy"] = t_http_proxies["http_proxy"]
         if len(t_http_proxies["https_proxy"]) > 0:
@@ -135,7 +137,8 @@ class CloudFlare:
         :param data:
         :return:
         """
-        t_http_proxies = CloudFlare.__get_http_proxies__(copy_proxy=True, **kwargs)
+        t_http_proxies = CloudFlare.__get_http_proxies__(
+            copy_proxy=True, **kwargs)
         method_method = getattr(requests, method)
         t_try = 0
         payload = {}
@@ -179,8 +182,10 @@ class CloudFlare:
     def get_zone_name(cls, domain: str, domain_class=-1):
         # split and strip
         domain_segments = domain.split(".")
-        domain_segments = [domain.lower().strip() for domain in domain_segments]
-        domain_segments = [domain for domain in domain_segments if len(domain) > 0]
+        domain_segments = [domain.lower().strip()
+                           for domain in domain_segments]
+        domain_segments = [
+            domain for domain in domain_segments if len(domain) > 0]
         # Join the last two segments of the domain name.
         t_len = len(domain_segments)
         if t_len < 2:
@@ -239,7 +244,8 @@ class CloudFlare:
             for zone in t_result_dict["result"]:
                 self.zones[zone["name"]] = {"id": zone["id"]}
             if "result_info" not in t_result_dict:
-                raise CloudFlareError(f"Failed to get zone, 'Got: \n{t_result_dict}'")
+                raise CloudFlareError(
+                    f"Failed to get zone, 'Got: \n{t_result_dict}'")
             fetched += t_result_dict["result_info"]["count"]
             total_count = t_result_dict["result_info"]["total_count"]
             if fetched >= total_count:
@@ -287,8 +293,10 @@ class CloudFlare:
                     t_record["id"]
                 )
                 if "values" not in dns_records[t_record["name"]][t_record["type"]]:
-                    dns_records[t_record["name"]][t_record["type"]]["values"] = []
-                dns_records[t_record["name"]][t_record["type"]]["values"].append(t_record)
+                    dns_records[t_record["name"]
+                                ][t_record["type"]]["values"] = []
+                dns_records[t_record["name"]][t_record["type"]
+                                              ]["values"].append(t_record)
             if "result_info" not in t_result_dict:
                 raise CloudFlareError(
                     f"Failed to get dns records for zone: \"{zone_name}\", 'Got: \n{t_result_dict}'"
@@ -335,7 +343,8 @@ class CloudFlare:
             self, full_sub_domain: str, dns_type: str, content: str
     ):
         dns_type = dns_type.strip().upper()
-        t_records = self.__get_records_for_domain_and_type__(full_sub_domain, dns_type)
+        t_records = self.__get_records_for_domain_and_type__(
+            full_sub_domain, dns_type)
         if content in t_records:
             return t_records[content]
 
@@ -412,7 +421,8 @@ class CloudFlare:
         else:
             data["proxied"] = self.proxied
         t_succ, t_result_dict = self.__request__(
-            urllib.parse.urljoin(self.api_url, zone_id + "/dns_records/" + record_id),
+            urllib.parse.urljoin(self.api_url, zone_id +
+                                 "/dns_records/" + record_id),
             "put",
             data=data,
             **kwargs,
@@ -432,7 +442,8 @@ class CloudFlare:
         :return:
         """
         t_succ, t_result_dict = self.__request__(
-            urllib.parse.urljoin(self.api_url, zone_id + "/dns_records/" + record_id),
+            urllib.parse.urljoin(self.api_url, zone_id +
+                                 "/dns_records/" + record_id),
             "delete",
             None,
             **kwargs,
@@ -496,8 +507,9 @@ class CloudFlare:
                 f"WARNING! Can't create more than one records for ({name}, {dns_type}), {dns_type} just one record permitted!"
             )
             return
-        t_records_dict = self.__get_records_for_domain_and_type__(name, dns_type)
-        ## just check for CNAME, CNAME need just one record
+        t_records_dict = self.__get_records_for_domain_and_type__(
+            name, dns_type)
+        # just check for CNAME, CNAME need just one record
         # if dns_type == "CNAME" and len(t_records_list) > 1:
         #     print(f"WARNING! Escape exists record ({name}, {dns_type}, {t_content}), {dns_type} just one record permitted!")
         #     return
@@ -507,7 +519,8 @@ class CloudFlare:
         t_non_exist_content = []
         for t_content in content_list:
             if t_content in t_records_dict:
-                print(f"Escape existing record ({name}, {dns_type}, {t_content})")
+                print(
+                    f"Escape existing record ({name}, {dns_type}, {t_content})")
             else:
                 t_non_exist_content.append(t_content)
         # do create for non-exist records
@@ -515,7 +528,8 @@ class CloudFlare:
         for t_content in t_non_exist_content:
             self.__create_one_record__(name, dns_type, t_content, **kwargs)
             # t_created_dict[(name, dns_type, t_content)] = t_result
-            print(f"Succeed to created a record ({name}, {dns_type}, {t_content})")
+            print(
+                f"Succeed to created a record ({name}, {dns_type}, {t_content})")
             time.sleep(0.1)
 
     def create_records_new(self, records_dict: dict, **kwargs):
@@ -541,7 +555,8 @@ class CloudFlare:
                         )
                     else:
                         t_ttl, t_proxied = records_dict[name][dns_type][t_content]
-                        t_non_exist_content.append((t_content, t_ttl, t_proxied))
+                        t_non_exist_content.append(
+                            (t_content, t_ttl, t_proxied))
                 # do create for non-exist records
                 # t_created_dict = {}
                 for t_content, t_ttl, t_proxied in t_non_exist_content:
@@ -573,17 +588,20 @@ class CloudFlare:
         # reset proxies
         # self.__set_http_proxies__(**kwargs)
         zone_id = self.__get_zone_id__(name)
-        t_record_dict = self.__get_records_for_domain_and_type__(name, dns_type)
+        t_record_dict = self.__get_records_for_domain_and_type__(
+            name, dns_type)
         for content in t_record_dict:
             record_id = t_record_dict[content]
             # delete from remote server
             if content not in content_list:
                 continue
-            t_succ, _ = self.__delete_record_by_id__(zone_id, record_id, **kwargs)
+            t_succ, _ = self.__delete_record_by_id__(
+                zone_id, record_id, **kwargs)
             if t_succ:
                 print(f"Succeed to delete [{name}, {dns_type}, {content}]")
             else:
-                print(f"Warnig! Failed to delete [{name}, {dns_type}, {content}]")
+                print(
+                    f"Warnig! Failed to delete [{name}, {dns_type}, {content}]")
             time.sleep(0.1)
 
     def delete_records_new(self, records_dict: dict, **kwargs):
@@ -615,7 +633,8 @@ class CloudFlare:
                         zone_id, record_id, **kwargs
                     )
                     if t_succ:
-                        print(f"Succeed to delete [{name}, {dns_type}, {content}]")
+                        print(
+                            f"Succeed to delete [{name}, {dns_type}, {content}]")
                     else:
                         print(
                             f"Warnig! Failed to delete [{name}, {dns_type}, {content}]"
@@ -644,7 +663,8 @@ class CloudFlare:
             )
             return
         # clean
-        t_records_dict = self.__get_records_for_domain_and_type__(name, dns_type)
+        t_records_dict = self.__get_records_for_domain_and_type__(
+            name, dns_type)
         # scan content list, find all exist records and non-exist records
         t_non_exist_contents = []
         t_exist_contents = []
@@ -670,7 +690,8 @@ class CloudFlare:
             print(f"Create ({name}, {dns_type}), {t_content})")
         # delete extra records
         for t_content in t_extra_records:
-            self.__delete_record_by_id__(zone_id, t_records_dict[t_content], **kwargs)
+            self.__delete_record_by_id__(
+                zone_id, t_records_dict[t_content], **kwargs)
             print(f"Delete ({name}, {dns_type}), {t_content})")
 
     def update_records_new(self, records_dict: dict, **kwargs):
@@ -698,30 +719,41 @@ class CloudFlare:
                     if t_content in t_current_records_dict:
                         t_exist_contents.append((t_content, t_ttl, t_proxied))
                     else:
-                        t_non_exist_contents.append((t_content, t_ttl, t_proxied))
+                        t_non_exist_contents.append(
+                            (t_content, t_ttl, t_proxied))
                 # find all extra records
                 t_extra_records = []
-                for t_content in t_current_records_dict:
-                    if t_content not in records_dict[name][dns_type]:
-                        t_extra_records.append(t_content)
+                if len(t_current_records_dict) > 0:
+                    for t_content in t_current_records_dict['values']:
+                        t_name = t_content['name']
+                        t_type = t_content['type']
+                        t_cont = t_content['content']
+                        t_ttl = t_content['ttl']
+                        t_proxied = t_content['proxied']
+                        if t_name not in records_dict or \
+                                t_type not in records_dict[name] or \
+                                t_cont not in records_dict[name][dns_type] or \
+                                records_dict[name][dns_type][t_cont] != (t_ttl, t_proxied):
+                            t_extra_records.append(t_content)
                 # update for existing records
                 for t_content, t_ttl, t_proxied in t_exist_contents:
-                    t_record_id = t_current_records_dict[t_content]
-                    self.__update_record_by_id__(
-                        t_record_id,
-                        name,
-                        dns_type,
-                        t_content,
-                        ttl=t_ttl,
-                        proxied=t_proxied,
-                        **kwargs,
-                    )
-                    print(f"Update for [{name}, {dns_type}, {t_content}]")
+                    if t_content in t_current_records_dict:
+                        t_record_id = t_current_records_dict[t_content]
+                        self.__update_record_by_id__(
+                            t_record_id,
+                            name,
+                            dns_type,
+                            t_content,
+                            ttl=t_ttl,
+                            proxied=t_proxied,
+                            **kwargs,
+                        )
+                        print(f"Update for [{name}, {dns_type}, {t_content}]")
                 # update t_extra_records with records in t_non_exist_contents:
                 while len(t_non_exist_contents) > 0:
                     t_content, t_ttl, t_proxied = t_non_exist_contents[0]
-                    if len(t_extra_records) > 0:
-                        t_record_id = t_current_records_dict[t_extra_records[0]]
+                    if len(t_extra_records) > 0 and len(t_current_records_dict) > 0 and t_extra_records[0]['id'] in t_current_records_dict:
+                        t_record_id = t_current_records_dict[t_extra_records[0]['id']]
                         self.__update_record_by_id__(
                             t_record_id,
                             name,
@@ -749,8 +781,9 @@ class CloudFlare:
                     del t_non_exist_contents[0]
                 # delete extra records
                 for t_content in t_extra_records:
-                    t_record_id = t_current_records_dict[t_content]
-                    self.__delete_record_by_id__(zone_id, t_record_id, **kwargs)
+                    t_record_id = t_content['id']
+                    self.__delete_record_by_id__(
+                        zone_id, t_record_id, **kwargs)
                     print(f"Delete [{name}, {dns_type}, {t_content}]")
 
 
@@ -762,7 +795,8 @@ def str2bool(v):
     elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
     else:
-        raise argparse.ArgumentTypeError("BooleTEMPOUTBOUNDVNEXTan value expected.")
+        raise argparse.ArgumentTypeError(
+            "BooleTEMPOUTBOUNDVNEXTan value expected.")
 
 
 def print_logs(t_u: list, t_c: list, t_d: list, t_k: list):
@@ -1005,7 +1039,7 @@ def main():
         t_domains_list = args.d_domain
         t_delete_records = True
     elif args.raw and len(args.raw) > 0:
-        ### raw data like： name,dns_type,content,ttl,proxied
+        # raw data like： name,dns_type,content,ttl,proxied
         t_update_records = True
         t_raw_list.extend(args.raw)
     elif args.raw_file and len(args.raw_file) > 0:
@@ -1057,7 +1091,8 @@ def main():
             with open(args.raw_alias_file, "r") as fp:
                 t_content_list = fp.readlines()
                 t_raw_alias_list.extend(
-                    [item.strip() for item in t_content_list if len(item.strip()) > 0]
+                    [item.strip()
+                     for item in t_content_list if len(item.strip()) > 0]
                 )
         except Exception as e:
             print(f"failed to read --raw-alias-file {args.raw_alias_file}")
@@ -1183,7 +1218,8 @@ def main():
                             )
                             sys.exit(1)
                         t_records_dict[t_domain].update(
-                            gen_content_dict(t_dns_type, [], args.ttl, args.proxied)
+                            gen_content_dict(
+                                t_dns_type, [], args.ttl, args.proxied)
                         )
     # do data check, just do while add update and delete records
     for t_records in t_records_dict.values():
