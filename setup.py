@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#cython: language_level=3
+# cython: language_level=3
 
 from setuptools import setup
 
@@ -8,9 +8,9 @@ setup(
     version="2.6.0",
     author='zhfreal',
     author_email='zhfreal@gmail.com',
-    description='util for dynu ddns domains and records',
-    keywords='dynu, ddns, records, domains',
-    long_description="list domains, list records, add domains, add records, update records, delete records",
+    description='maintain cloudflare ddns records',
+    keywords='cloudflare, ddns, records',
+    long_description="list domains, list records, add , update or delete records",
     long_description_content_type='text/markdown',
     url='https://github.com/zhfreal/cloudflare-ddns',
     project_urls={
@@ -55,4 +55,3 @@ setup(
         # 'test': ['coverage'],
     },
 )
-
