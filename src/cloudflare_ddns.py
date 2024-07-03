@@ -1263,7 +1263,3 @@ def main():
         cf.delete_records_new(t_records_dict)
     else:
         print("Invalid operation!")
-
-
-if __name__ == "__main__":
-    main()
