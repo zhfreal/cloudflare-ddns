@@ -173,8 +173,7 @@ class CloudFlare:
                 )
                 if t_rsp.status_code != 200:
                     print(
-                        f"Request {
-                            url} using method - {method} with header {self.headers} and data {data}, got {t_rsp}"
+                        f"Request {url} using method - {method} with header {self.headers} and data {data}, got {t_rsp}"
                     )
                     return False, requests.HTTPError(t_rsp.reason)
                 t_result = json.loads(t_rsp.text)
@@ -188,8 +187,8 @@ class CloudFlare:
                     requests.ReadTimeout,
             ) as e:
                 print(
-                    f"Request {url} using method - {method} with header {
-                        self.headers} and data {data}, got {str(e)}"
+                    f"Request {url} using method - {method} "
+                    f"with header {self.headers} and data {data}, got {str(e)}"
                 )
                 print("retry!")
                 t_try += 1
@@ -277,8 +276,7 @@ class CloudFlare:
     def __init_records_for_zone__(self, zone_name, **kwargs):
         if zone_name not in self.zones:
             raise CloudFlareError(
-                f"Can't find zone {
-                    zone_name} for you. Please check with Cloudflare!"
+                f"Can't find zone {zone_name} for you. Please check with Cloudflare!"
             )
         zone_id = self.zones[zone_name]["id"]
         domain = ''
@@ -321,8 +319,7 @@ class CloudFlare:
                 if t_record["type"] not in dns_records[t_record["name"]]:
                     dns_records[t_record["name"]][t_record["type"]] = {}
                 if t_record["content"] not in dns_records[t_record["name"]][t_record["type"]]:
-                    dns_records[t_record["name"]][t_record["type"]
-                                                  ][t_record["content"]] = {}
+                    dns_records[t_record["name"]][t_record["type"]][t_record["content"]] = {}
                 dns_records[t_record["name"]][t_record["type"]][t_record["content"]] = \
                     t_record["id"]
                 self.dns_records[t_record["id"]] = t_record
@@ -349,8 +346,7 @@ class CloudFlare:
     def __get_records_for_zone__(self, zone_name):
         if zone_name not in self.zones:
             raise CloudFlareError(
-                f"Can't find zone {
-                    zone_name} for you. Please check with Cloudflare!"
+                f"Can't find zone {zone_name} for you. Please check with Cloudflare!"
             )
         return self.zones[zone_name]["records"]
 
@@ -358,8 +354,7 @@ class CloudFlare:
         prefix, zone_name = self.split_domain(full_sub_domain)
         if len(prefix) == 0 or len(zone_name) == 0 or zone_name not in self.zones:
             raise CloudFlareError(
-                f"Can't find zone {
-                    zone_name} for you. Please check with Cloudflare!"
+                f"Can't find zone {zone_name} for you. Please check with Cloudflare!"
             )
         self.__init_records_for_zone__(
             zone_name, domain=full_sub_domain, **kwargs)
@@ -381,11 +376,12 @@ class CloudFlare:
         return records
 
     def __get_record_id_for_domain_type_and_content__(
-            self, full_sub_domain: str, dns_type: str, content: str
+            self, zone: str, prefix: str, dns_type: str, content: str
     ):
         dns_type = dns_type.strip().upper()
+        full_sub_domain = f"{prefix}.{zone}"
         t_records = self.__get_records_for_domain_and_type__(
-            full_sub_domain, dns_type)
+            zone, prefix, dns_type)
         if content in t_records:
             return t_records[content]
 
@@ -433,8 +429,7 @@ class CloudFlare:
         )
         if not t_succ or "result" not in t_result_dict:
             raise CloudFlareError(
-                f'Failed to create "{name}" records for zone: "{
-                    zone_name}", \'{t_result_dict}\''
+                f'Failed to create "{name}" records for zone: "{zone_name}", \'{t_result_dict}\''
             )
         t_record = t_result_dict["result"]
         self.dns_records[t_record["id"]] = t_record
@@ -474,16 +469,13 @@ class CloudFlare:
         if "records" not in self.zones[zone_name] or \
                 name not in self.zones[zone_name]["records"] or \
                 dns_type not in self.zones[zone_name]["records"][name] or \
-                old_content not in self.zones[zone_name]["records"][name][
-                    dns_type]:
+                old_content not in self.zones[zone_name]["records"][name][dns_type]:
             raise CloudFlareError(
-                f"Can't find record {name}: {dns_type}, {
-                    old_content} in local cache"
+                f"Can't find record {name}: {dns_type}, {old_content} in local cache"
             )
         if self.zones[zone_name]["records"][name][dns_type][old_content] != record_id:
             raise CloudFlareError(
-                f"Inconsistent record {record_id} and {name}: {
-                    dns_type}, {old_content} in local cache"
+                f"Inconsistent record {record_id} and {name}: {dns_type}, {old_content} in local cache"
             )
         data = {"type": dns_type, "name": name, "content": content}
         if kwargs.get("ttl") and kwargs["ttl"] != 1:
@@ -504,8 +496,8 @@ class CloudFlare:
         )
         if not t_succ or "result" not in t_result_dict:
             raise CloudFlareError(
-                f'Failed to update "{name}: {dns_type}, {
-                    content}" records for zone: "{zone_name}", \'{t_result_dict}\''
+                f'Failed to update "{name}: {dns_type}, {content}" '
+                f'records for zone: "{zone_name}", \'{t_result_dict}\''
             )
         t_record = t_result_dict["result"]
         # update self.dns_records
@@ -536,15 +528,15 @@ class CloudFlare:
                 name not in self.zones[zone_name]["records"] or \
                 dns_type not in self.zones[zone_name]["records"][name] or \
                 content not in self.zones[zone_name]["records"][name][
-                    dns_type]:
+            dns_type]:
             raise CloudFlareError(
-                f"Can't find record {name}: {
-                    dns_type}, {content} in local cache"
+                f"Can't find record {name}: "
+                f"{dns_type}, {content} in local cache"
             )
         if self.zones[zone_name]["records"][name][dns_type][content] != record_id:
             raise CloudFlareError(
-                f"Inconsistent record {record_id} and {name}: {
-                    dns_type}, {content} in local cache"
+                f"Inconsistent record {record_id} and {name}: "
+                f"{dns_type}, {content} in local cache"
             )
         t_succ, t_result_dict = self.__request__(
             urllib.parse.urljoin(self.api_url, zone_id +
@@ -556,8 +548,7 @@ class CloudFlare:
         # failed to perford delete-action, rase an error
         if not t_succ:
             raise CloudFlareError(
-                f'Can\'t delete record id - "{
-                    record_id}" for reason: {t_result_dict}'
+                f'Can\'t delete record id - "{record_id}" for reason: {t_result_dict}'
             )
         # delete from local cache
         del self.dns_records[record_id]
@@ -720,7 +711,7 @@ class CloudFlare:
         for t_zone in records_dict:
             t_zone = t_zone.lower()
             self.__init_records_for_zone__(t_zone, **kwargs)
-            self.__get_records_for_zone__(t_zone, **kwargs)
+            self.__get_records_for_zone__(t_zone)
             for t_prefix in records_dict[t_zone]:
                 t_sub_domain = f"{t_prefix}.{t_zone}"
                 for dns_type in records_dict[t_zone][t_prefix]:
@@ -732,9 +723,8 @@ class CloudFlare:
                     for t_content in records_dict[t_zone][t_prefix][dns_type]:
                         if t_content in t_records_dict:
                             print(
-                                f"Escape existing record ({t_sub_domain}, {
-                                    dns_type},"
-                                f" {t_content})"
+                                f"Escape existing record ({t_sub_domain}, "
+                                f"{dns_type}, {t_content})"
                             )
                         else:
                             t_ttl, t_proxied = records_dict[t_zone][t_prefix][dns_type][t_content]
@@ -753,8 +743,7 @@ class CloudFlare:
                         )
                         # t_created_dict[(name, dns_type, t_content)] = t_result
                         print(
-                            f"Succeed to created a record ({t_sub_domain}, {
-                                dns_type},"
+                            f"Succeed to created a record ({t_sub_domain}, {dns_type},"
                             f" {t_content})"
                         )
                         time.sleep(0.1)
@@ -1416,7 +1405,7 @@ def main():
     # not list zones
     # check domain
     if args.domain and len(args.domain) > 0:
-        t_domains_list.extent(split_content_list(args.domain))
+        t_domains_list.extend(split_content_list(args.domain))
         for t_domain in t_domains_list:
             if cf.is_zone(t_domain):
                 print("{t_domain} is zone! Please do not use \"-d\" with a zone.")
@@ -1544,7 +1533,7 @@ def main():
             for t_zone in t_records_dict:
                 for t_prefix in t_records_dict[t_zone]:
                     for t_dns_type in t_dns_type_list:
-                        t_records_dict[t_domain][t_prefix][t_dns_type] = {}
+                        t_records_dict[t_zone][t_prefix][t_dns_type] = {}
     # list records
     if action_list_records:
         cf.list_records(t_records_dict)
