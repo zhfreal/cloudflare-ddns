@@ -12,15 +12,15 @@ RUN mkdir /app
 
 # Copy requirements file
 COPY requirements.txt . /app/
+# Copy your source code directory
+COPY src /app/
+COPY cloudflare_ddns.py /app/
 
 # Install dependencies using a separate RUN step for clarity
 RUN pip install -r /app/requirements.txt && rm /app/requirements.txt
 
-# Copy your source code directory
-COPY src /app/
-
 # ENTRYPOINT for flexibility in passing arguments
-ENTRYPOINT ["python", "/app/src/cloudflare_ddns.py"]
+ENTRYPOINT ["python", "/app/cloudflare_ddns.py"]
 
 # Optional CMD for default behavior (can be overridden at runtime)
 CMD []
