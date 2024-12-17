@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # cython: language_level=3
 
-from setuptools import setup
+from setuptools import setup, find_packages
+
+# Read requirements from requirements.txt
+with open('requirements.txt', 'r') as f:
+    requirements = f.read().splitlines()
 
 setup(
-    name='cloudflare-ddns',
-    version="2.8.2",
+    name="cloudflare-ddns",
+    version="2.8.3",
     author='zhfreal',
     author_email='zhfreal@gmail.com',
     description='maintain cloudflare ddns records',
@@ -21,37 +25,12 @@ setup(
         # 'Funding': '',
         # 'Say Thanks!': '',
     },
-    install_requires=[
-        'requests>=2.27.0',
-        'gevent>=21.8.0'
-    ],
-    # package_dir={'': 'src'},
-    packages=['src'],
-    classifiers=[
-        # see https://pypi.org/classifiers/
-        'Development Status :: 5 - Production/Stable',
-
-        'Intended Audience :: Developers',
-        'Topic :: Software Development :: Build Tools',
-
-        'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Programming Language :: Python :: 3.11',
-        'Programming Language :: Python :: 3.12',
-        'Programming Language :: Python :: 3 :: Only',
-        'License :: OSI Approved :: MIT License',
-        'Operating System :: OS Independent',
-    ],
+    packages=find_packages(),
+    install_requires=requirements,
     entry_points={
         'console_scripts': [
-            'cloudflare-ddns=src.cloudflare_ddns:main']
-    },
-    python_requires='>=3.8',
-    # install_requires=['Pillow'],
-    extras_require={
-        'dev': ['check-manifest'],
-        # 'test': ['coverage'],
+            # 'command-name=module.submodule:function'
+            'cloudflare-ddns=src.cloudflare_ddns:main',
+        ],
     },
 )
