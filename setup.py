@@ -4,8 +4,8 @@
 from setuptools import setup, find_packages
 
 # Read requirements from requirements.txt
-with open('requirements.txt', 'r') as f:
-    requirements = f.read().splitlines()
+# with open('requirements.txt', 'r') as f:
+#     requirements = f.read().splitlines()
 
 setup(
     name="cloudflare-ddns",
@@ -26,7 +26,10 @@ setup(
         # 'Say Thanks!': '',
     },
     packages=find_packages(),
-    install_requires=requirements,
+    install_requires=[
+        'requests >= 2.27.0',
+        'gevent >= 21.8.0'
+    ],
     entry_points={
         'console_scripts': [
             # 'command-name=module.submodule:function'
