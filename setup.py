@@ -9,7 +9,7 @@ with open('requirements.txt', 'r') as f:
 
 setup(
     name="cloudflare-ddns",
-    version="2.8.3",
+    version="2.8.4",
     author='zhfreal',
     author_email='zhfreal@gmail.com',
     description='maintain cloudflare ddns records',
