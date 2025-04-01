@@ -319,7 +319,8 @@ class CloudFlare:
                 if t_record["type"] not in dns_records[t_record["name"]]:
                     dns_records[t_record["name"]][t_record["type"]] = {}
                 if t_record["content"] not in dns_records[t_record["name"]][t_record["type"]]:
-                    dns_records[t_record["name"]][t_record["type"]][t_record["content"]] = {}
+                    dns_records[t_record["name"]][t_record["type"]
+                                                  ][t_record["content"]] = {}
                 dns_records[t_record["name"]][t_record["type"]][t_record["content"]] = \
                     t_record["id"]
                 self.dns_records[t_record["id"]] = t_record
@@ -525,10 +526,10 @@ class CloudFlare:
         zone_name = record["zone_name"]
         dns_type = record["type"]
         if "records" not in self.zones[zone_name] or \
-                name not in self.zones[zone_name]["records"] or \
-                dns_type not in self.zones[zone_name]["records"][name] or \
-                content not in self.zones[zone_name]["records"][name][
-            dns_type]:
+            name not in self.zones[zone_name]["records"] or \
+            dns_type not in self.zones[zone_name]["records"][name] or \
+            content not in self.zones[zone_name]["records"][name][
+                dns_type]:
             raise CloudFlareError(
                 f"Can't find record {name}: "
                 f"{dns_type}, {content} in local cache"
@@ -912,7 +913,7 @@ class CloudFlare:
                         for t_content, t_record_id in t_current_records_dict.items():
                             t_record = self.dns_records[t_record_id]
                             t_name = t_record['name']
-                            t_zone = t_record['zone_name']
+                            # t_zone = t_record['zone_name']
                             t_type = t_record['type']
                             t_cont = t_content
                             t_ttl = t_record['ttl']
