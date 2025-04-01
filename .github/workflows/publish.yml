@@ -1,0 +1,68 @@
+name: Build and Upload Python Package to Release
+
+# Controls when the workflow will run
+on:
+  release:
+    types: [published] # Trigger workflow when a release is published (this includes pre-releases marked as published)
+    # You could also use `types: [created]` if you prefer it to trigger slightly earlier,
+    # but 'published' ensures the release page exists and is ready for assets.
+
+# Grant permissions to write contents (needed to upload release assets)
+permissions:
+  contents: write
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build_and_upload:
+    name: Build Wheel and Upload to Release
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
+
+    steps:
+      - name: Checkout repository
+        # Check out the specific Git ref (tag or commit) associated with the release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }} # Ensures you build the code corresponding to the release tag
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Choose the Python version for building. Match your project needs.
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel # Install 'build' (recommended) and 'wheel'
+
+      - name: Build wheel and sdist
+        run: python -m build # This command builds both sdist and wheel into the dist/ directory
+
+      - name: List built artifacts # Optional: Verify the files were created
+        run: ls -l dist/
+
+      # Use the official GitHub Action to upload release assets
+      # This action uploads assets one by one. Repeat for each artifact.
+      - name: Upload Wheel Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub Actions
+        with:
+          # Get the upload URL from the context of the release event that triggered the workflow
+          upload_url: ${{ github.event.release.upload_url }}
+          # Use a wildcard to find the wheel file. Assumes only one .whl file.
+          asset_path: ./dist/*.whl
+          # Use the actual filename of the wheel as the asset name
+          asset_name: $(basename ./dist/*.whl)
+          asset_content_type: application/zip # MIME type for wheel files
+
+      - name: Upload Source Distribution Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          # Use a wildcard to find the source distribution file. Assumes only one .tar.gz file.
+          asset_path: ./dist/*.tar.gz
+          # Use the actual filename of the sdist as the asset name
+          asset_name: $(basename ./dist/*.tar.gz)
+          asset_content_type: application/gzip # MIME type for gzipped tarballs
