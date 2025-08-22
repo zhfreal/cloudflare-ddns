@@ -73,7 +73,8 @@ class CloudFlare:
     #         }
     #     }
     zones = {}
-    zones_list = []
+    # zones_list = []
+    zones_id = {}
     http_proxies_default = {"http_proxy": "", "https_proxy": ""}
     public_ip_finder = (
         "https://api64.ipify.org/",
@@ -261,7 +262,7 @@ class CloudFlare:
                 )
             for zone in t_result_dict["result"]:
                 self.zones[zone["name"]] = {"id": zone["id"]}
-                self.zones_list.append(zone["name"])
+                # self.zones_list.append(zone["name"])
             if "result_info" not in t_result_dict:
                 raise CloudFlareError(
                     f"Failed to get zone, 'Got: \n{t_result_dict}'")
@@ -271,7 +272,7 @@ class CloudFlare:
                 break
             else:
                 page += 1
-        self.zones_list = sort_zones(self.zones_list)
+        # self.zones_list = sort_zones(self.zones_list)
 
     def __init_records_for_zone__(self, zone_name, **kwargs):
         if zone_name not in self.zones:
@@ -350,6 +351,17 @@ class CloudFlare:
                 f"Can't find zone {zone_name} for you. Please check with Cloudflare!"
             )
         return self.zones[zone_name]["records"]
+
+    def __get_zone_name_from_id__(self, zone_id: str):
+        """
+        Get zone name from zone id
+        :param zone_id: zone id
+        :return: zone name
+        """
+        for zone_name, zone_info in self.zones.items():
+            if zone_info["id"] == zone_id:
+                return zone_name
+        raise CloudFlareError(f"Can't find zone for id {zone_id}")
 
     def __init_records_for_sub_domain__(self, full_sub_domain, **kwargs):
         prefix, zone_name = self.split_domain(full_sub_domain)
@@ -523,7 +535,7 @@ class CloudFlare:
         record = self.dns_records[record_id]
         content = record["content"]
         name = record["name"]
-        zone_name = record["zone_name"]
+        zone_name = self.__get_zone_name_from_id__(zone_id)
         dns_type = record["type"]
         if "records" not in self.zones[zone_name] or \
             name not in self.zones[zone_name]["records"] or \
@@ -579,7 +591,7 @@ class CloudFlare:
         :param domain: domain
         :return:
         """
-        for zone in self.zones_list:
+        for zone in self.zones.keys():
             if zone == domain:
                 return True
         return False
@@ -591,7 +603,7 @@ class CloudFlare:
         :return:
         """
         domain = str(domain).strip().strip(".").strip().lower()
-        for zone in self.zones_list:
+        for zone in self.zones.keys():
             if domain.endswith("." + zone):
                 return True
         return False
@@ -610,7 +622,7 @@ class CloudFlare:
         :return: tuple of (prefix, zone)
         """
         domain = str(domain).strip().strip(".").strip().lower()
-        for zone in self.zones_list:
+        for zone in self.zones.keys():
             if domain.endswith("." + zone):
                 prefix = domain.removesuffix("." + zone)
                 prefix = prefix.strip(".")
@@ -623,14 +635,13 @@ class CloudFlare:
         :param zone:
         :return:
         """
-        zone_name = self.__get_zone_name__(zone)
+        zone_name = zone.strip().strip(".").strip().lower()
         self.__init_records_for_zone__(zone_name, **kwargs)
         for key, value in self.zones[zone_name]["records"].items():
-            if zone == zone_name or key == zone:
-                print(f"{key}: ")
-                for v in value.values():
-                    for t_v in v["values"]:
-                        print(t_v)
+            print(f"{key}: ")
+            for v in value.values():
+                for t_v in v["values"]:
+                    print(t_v)
 
     def list_records(self, records: dict, **kwargs):
         """
