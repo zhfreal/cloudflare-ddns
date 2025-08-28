@@ -1022,6 +1022,7 @@ def split_content_list(content_list: list):
     t_content_list = []
     for t in content_list:
         t_list = split_content(str(t))
+        t_list = [t for t in t_list if len(t) > 0]
         t_content_list.extend(t_list)
     return list(set(t_content_list))
 
