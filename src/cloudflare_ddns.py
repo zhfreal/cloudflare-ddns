@@ -1120,14 +1120,14 @@ options:
   --dns-type DNS_TYPE   dns type for delete
   -t TTL, --ttl TTL     ttl for record
   --proxied [PROXIED]   It should be proxied
-  -r RAW, --raw RAW     raw record for operation. For example, "add_record -d example.com --raw ww1,A,1.1.1.1,60,false" and "--raw
-                        ww2,CNAME,w1.example.com,60,false". The "content" must be full target while DNS type is "CNAME", comparing with "--raw-
-                        alias".
+  -r RAW, --raw RAW     raw record for operation. For example, "--add-record -d example.com --raw ww1,A,1.1.1.1,60,false" and "--raw
+                        ww2,CNAME,w1.example.com,60,false". The "content" must be full target while DNS type is "CNAME", which is different with
+                        "--raw-alias".
   --raw-file RAW_FILE   file stored raw for operation, each line contains "name,dns_type,content,ttl,proxied", which is the same as "--raw".
   --raw-alias RAW_ALIAS
-                        alias of raw content while do add or operation. For example, "add_record -d example.com "--raw-alias
+                        alias of raw content while do add or operation. For example, "--add-record -d example.com "--raw-alias
                         ww1,A,1.1.1.1,60,false" and"--raw-alias ww2,CNAME,w1,60,false". The "content" must be alias while DNS type is "CNAME",
-                        comparing with "--raw"."--raw-alias ww2,CNAME,w1,60,false" equivalent to "--raw ww2,CNAME,w1.example.com,60,false".
+                        which is different with "--raw"."--raw-alias ww2,CNAME,w1,60,false" equivalent to "--raw ww2,CNAME,w1.example.com,60,false".
   --raw-alias-file RAW_ALIAS_FILE
                         file stored raw for operation, each line contains "name, dns_type, content, ttl, proxied", which is the same as "--raw-
                         alias".
