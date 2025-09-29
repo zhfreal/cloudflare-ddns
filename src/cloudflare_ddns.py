@@ -646,11 +646,19 @@ class CloudFlare:
     def list_records(self, records: dict, **kwargs):
         """
         List all records for a zone
-        :param zone:
+        :param records_dict: {<zone>: {"prefix": {<type>: {<content>: (ttl, proxied)}}}}
         :return:
         """
         for t_zone in records:
             self.__init_records_for_zone__(t_zone, **kwargs)
+            if records[t_zone] is None or len(records[t_zone]) == 0:
+                for t_domain, t_records in self.zones[t_zone]["records"].items():
+                    print(f"{t_domain}: ")
+                    for t_type, t_values in t_records.items():
+                        for t_content, t_id in t_values.items():
+                            if t_id in self.dns_records:
+                                print(self.dns_records[t_id])
+                return
             for t_prefix in records[t_zone]:
                 t_sub_domain = f"{t_prefix}.{t_zone}"
                 if t_sub_domain in self.zones[t_zone]["records"]:
@@ -1020,6 +1028,8 @@ def is_valid_dns_type(dns_type: str):
 
 def split_content_list(content_list: list):
     t_content_list = []
+    if not content_list or len(content_list) == 0:
+        return t_content_list
     for t in content_list:
         t_list = split_content(str(t))
         t_list = [t for t in t_list if len(t) > 0]
