@@ -809,8 +809,8 @@ class CloudFlare:
             t_zone = t_zone.lower()
             self.__init_records_for_zone__(t_zone, **kwargs)
             zone_id = self.__get_zone_id__(t_zone)
-            record_id_list_for_del = []
             for t_prefix in records_dict[t_zone]:
+                record_id_list_for_del = []
                 if len(records_dict[t_zone][t_prefix]) == 0:
                     t_current_record_dict = self.__get_records_for_domain__(
                         f"{t_prefix}.{t_zone}")
