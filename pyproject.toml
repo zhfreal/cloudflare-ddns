@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cloudflare-ddns"
+version = "2.17.0"
+authors = [
+  { name="zhfreal", email="zhfreal@gmail.com" },
+]
+description = "maintain cloudflare ddns records"
+readme = "README.md"  # Assuming you have a README.md file for the long description
+keywords = ["cloudflare", "ddns", "records"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",  # Example: Add your project's license
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.7"  # Example: Specify the Python versions you support
+
+dependencies = [
+    "requests >= 2.27.0",
+    "gevent >= 21.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/zhfreal/cloudflare-ddns"
+Documentation = "https://github.com/zhfreal/cloudflare-ddns"
+"Bug Reports" = "https://github.com/zhfreal/cloudflare-ddns/issues"
+"Source Code" = "https://github.com/zhfreal/cloudflare-ddns"
+
+[project.scripts]
+cloudflare-ddns = "src.cloudflare_ddns:main"
+
+[tool.setuptools.packages.find]
+# This section replaces find_packages()
+# By default, it finds packages in the project root.
+# If your packages are in a 'src' directory, you might need to specify:
+# where = ["src"]
