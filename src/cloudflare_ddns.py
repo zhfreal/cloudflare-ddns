@@ -935,8 +935,8 @@ class CloudFlare:
                             # t_zone = t_record['zone_name']
                             t_type = t_record['type']
                             t_cont = t_content
-                            t_ttl = t_record['ttl']
-                            t_proxied = t_record['proxied']
+                            # t_ttl = t_record['ttl']
+                            # t_proxied = t_record['proxied']
                             t_prefix = str(t_name).removesuffix(f".{t_zone}")
                             if t_prefix not in records_dict[t_zone] or \
                                     t_type not in t_prefix_obj or \
@@ -946,17 +946,36 @@ class CloudFlare:
                     for t_content, t_ttl, t_proxied in t_exist_contents:
                         if t_content in t_current_records_dict:
                             t_record_id = t_current_records_dict[t_content]
-                            self.__update_record_by_id__(
-                                t_record_id,
-                                t_full_domain,
-                                dns_type,
-                                t_content,
-                                ttl=t_ttl,
-                                proxied=t_proxied,
-                                **kwargs,
-                            )
-                            print(f"Update for [{t_full_domain}, "
+                            if t_ttl != self.dns_records[t_record_id]['ttl'] or \
+                                    t_proxied != self.dns_records[t_record_id]['proxied']:
+                                self.__update_record_by_id__(
+                                    t_record_id,
+                                    t_full_domain,
+                                    dns_type,
+                                    t_content,
+                                    ttl=t_ttl,
+                                    proxied=t_proxied,
+                                    **kwargs,
+                                )
+                                print(f"Update for [{t_full_domain}, "
+                                    f"{dns_type}, {t_content}]")
+                    # update t_extra_records according t_non_exist_contents
+                    while len(t_extra_records) > 0 and len(t_non_exist_contents) > 0:
+                        t_n_content, t_n_ttl, t_n_proxied = t_non_exist_contents[0]
+                        t_record_id = t_current_records_dict[t_content]
+                        self.__update_record_by_id__(
+                            t_record_id,
+                            t_full_domain,
+                            dns_type, 
+                            t_n_content, 
+                            ttl=t_n_ttl,
+                            proxied=t_n_proxied, 
+                            **kwargs
+                        )
+                        print(f"Update for [{t_full_domain}, "
                                   f"{dns_type}, {t_content}]")
+                        del t_non_exist_contents[0]
+                        del t_extra_records[0]
                     # delete extra records
                     for t_content in t_extra_records:
                         t_record_id = t_current_records_dict[t_content]
@@ -965,8 +984,7 @@ class CloudFlare:
                         print(f"Delete [{t_full_domain}, "
                               f"{dns_type}, {t_content}]")
                     # add for non-exist records:
-                    while len(t_non_exist_contents) > 0:
-                        t_content, t_ttl, t_proxied = t_non_exist_contents[0]
+                    for t_content, t_ttl, t_proxied  in t_non_exist_contents:
                         self.__create_one_record__(
                             t_full_domain,
                             dns_type,
@@ -1038,9 +1056,14 @@ def split_content_list(content_list: list):
 
 
 def split_content(content: str):
+    t_list = split_content_no_set(content)
+    return list(set(t_list))
+
+
+def split_content_no_set(content: str):
     t_re_rules = RE_SPLITTER_WITH_WHITESPACE
     t_list = t_re_rules.split(str(content))
-    return list(set(t_list))
+    return t_list
 
 
 def sort_zones(zones: list):
@@ -1065,8 +1088,8 @@ def sort_zones(zones: list):
 
 def custom_help():
     msg = '''usage: 
-  1. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --list_zone <-z ZONE> [-z ZONE]...
-  2. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --list_record \\
+  1. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --list-zone <-z ZONE> [-z ZONE]...
+  2. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --list-record \\
         <-d DOMAIN [-d domain]... | -z ZONE [-z ZONE] [-a ALIAS [-a ALIAS]...]> [--dns-type DNS_TYPE] \\
   UPDATE:
   3. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --update-record \\
@@ -1091,8 +1114,8 @@ def custom_help():
         [-r RAW | --raw-file RAW_FILE] | [--raw-alias ALIAS | --raw-alias-file ALIAS_FILE] | [--dns-type DNS_TYPE]]
 
 command arguments:
-  --list_zone            list all zones
-  --list_record          list records for specific zone
+  --list-zone            list all zones
+  --list-record          list records for specific zone
   --update-record         domain for update
   --add-record            domain for add
   --delete-record         domain for delete
@@ -1173,7 +1196,24 @@ def main():
         help="list all zones",
     )
     cmd_group.add_argument(
+        "--list-zones",
+        action="store",
+        dest="list_zone",
+        default=False,
+        const=True,
+        nargs='?',
+        type=str2bool,
+        help="list all zones",
+    )
+    cmd_group.add_argument(
         "--list-record",
+        action="store",
+        dest="list_record", nargs='?',
+        type=str2bool, const=True, default=False,
+        help="list records for specific zone"
+    )
+    cmd_group.add_argument(
+        "--list-records",
         action="store",
         dest="list_record", nargs='?',
         type=str2bool, const=True, default=False,
@@ -1187,6 +1227,13 @@ def main():
         help="domain for update"
     )
     cmd_group.add_argument(
+        "--update-records",
+        action="store",
+        dest="update_record", nargs='?',
+        type=str2bool, const=True, default=False,
+        help="domain for update"
+    )
+    cmd_group.add_argument(
         "--add-record",
         action="store",
         dest="add_record", nargs='?',
@@ -1194,7 +1241,21 @@ def main():
         help="domain for add"
     )
     cmd_group.add_argument(
+        "--add-records",
+        action="store",
+        dest="add_record", nargs='?',
+        type=str2bool, const=True, default=False,
+        help="domain for add"
+    )
+    cmd_group.add_argument(
         "--delete-record",
+        action="store",
+        dest="delete_record", nargs='?',
+        type=str2bool, const=True, default=False,
+        help="domain for delete"
+    )
+    cmd_group.add_argument(
+        "--delete-records",
         action="store",
         dest="delete_record", nargs='?',
         type=str2bool, const=True, default=False,
@@ -1417,9 +1478,9 @@ def main():
                 "Please use \"--zone\" with \"--raw\", \"--raw-alias\", \"--raw-file\" or \"--raw-alias-file\"")
             sys.exit(1)
         if ((args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0)) and \
-                (args.raw_alias or len(args.raw_alias) > 0 or args.raw_alias_file or len(args.raw_alias_file) > 0):
+                ((args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0)):
             print(
-                "Please do not use \"--raw\" or \"--raw-file\" with \"--raw-alias\" or \"--raw-alias-file\"")
+                "Please do not use \"--raw\" or \"--raw-file\" with \"--raw-alias\" or \"--raw-alias-file\" at the same time.")
             sys.exit(1)
     cf = CloudFlare(email=args.email, api_key=args.api_key)
     if action_list_zones:
@@ -1508,16 +1569,27 @@ def main():
                 print(f"failed to read --raw-file {args.raw_file}")
                 raise E
         for t_raw in t_raw_list:
-            t_line_list = split_content_list(t_raw)
+            t_line_list = split_content_no_set(t_raw)
             if len(t_line_list) != 5:
                 print(f"invalid raw content {t_raw}")
                 sys.exit(1)
             t_prefix, t_dns_type, t_content, t_ttl, t_proxied = t_line_list
+            try:
+                t_ttl = int(t_ttl)
+            except Exception as E:
+                if t_ttl.lower() != "auto":
+                    t_ttl = -1
+                else:
+                    print(f"invalid ttl {t_ttl} in raw content {t_raw}")
+                    raise E
             for t_zone in t_records_dict:
                 if t_prefix not in t_records_dict[t_zone]:
                     t_records_dict[t_zone][t_prefix] = {}
-                t_records_dict[t_zone][t_prefix].update(gen_content_dict(
-                    t_dns_type, [t_content], t_ttl, t_proxied))
+                if t_dns_type not in t_records_dict[t_zone][t_prefix]:
+                    t_records_dict[t_zone][t_prefix][t_dns_type] = {}
+                t_records_dict[t_zone][t_prefix][t_dns_type][t_content]=(t_ttl, str2bool(t_proxied))
+                # t_records_dict[t_zone][t_prefix].update(gen_content_dict(
+                #     t_dns_type, [t_content], t_ttl, str2bool(t_proxied)))
     if (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
         t_raw_list = []
         if args.raw_alias and len(args.raw_alias) > 0:
@@ -1534,17 +1606,29 @@ def main():
                 print(f"failed to read --raw-alias-file {args.raw_alias_file}")
                 raise E
         for t_raw in t_raw_list:
-            t_line_list = split_content_list(t_raw)
+            t_line_list = split_content_no_set(t_raw)
             if len(t_line_list) != 5:
                 print(f"invalid raw content {t_raw}")
                 sys.exit(1)
             # t_content is just prefix in --raw-alias or --raw-alias-file
             t_prefix, t_dns_type, t_content, t_ttl, t_proxied = t_line_list
+            t_content = t_content + f".{t_zone}"
+            try:
+                t_ttl = int(t_ttl)
+            except Exception as E:
+                if t_ttl.lower() != "auto":
+                    t_ttl = -1
+                else:
+                    print(f"invalid ttl {t_ttl} in raw content {t_raw}")
+                    raise E
             for t_zone in t_records_dict:
                 if t_prefix not in t_records_dict[t_zone]:
                     t_records_dict[t_zone][t_prefix] = {}
-                t_records_dict[t_zone][t_prefix].update(gen_content_dict(
-                    t_dns_type, [f"{t_content}.{t_zone}"], t_ttl, t_proxied))
+                if t_dns_type not in t_records_dict[t_zone][t_prefix]:
+                    t_records_dict[t_zone][t_prefix][t_dns_type] = {}
+                t_records_dict[t_zone][t_prefix][t_dns_type][t_content]=(t_ttl, str2bool(t_proxied))
+                # t_records_dict[t_zone][t_prefix].update(gen_content_dict(
+                #     t_dns_type, [f"{t_content}.{t_zone}"], t_ttl, str2bool(t_proxied)))
     # only works when action_list_records or action_delete_records
     if args.dns_type and len(args.dns_type) > 0:
         if action_list_records or action_delete_records:
@@ -1563,7 +1647,7 @@ def main():
     elif action_update_records:
         cf.update_records_new(t_records_dict)
     elif action_add_records:
-        cf.create_records_new(t_records_dict)
+        cf.update_records_new(t_records_dict)
     elif action_delete_records:
         cf.delete_records_new(t_records_dict)
     else:

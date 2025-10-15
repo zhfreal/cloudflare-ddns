@@ -1,4 +1,4 @@
 #!/usr/bin/env python3
 # cython: language_level=3
 
-__version__ = "2.11.1"
+__version__ = "2.15.0"

@@ -9,7 +9,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="cloudflare-ddns",
-    version="2.11.1",
+    version="2.15.0",
     author='zhfreal',
     author_email='zhfreal@gmail.com',
     description='maintain cloudflare ddns records',
