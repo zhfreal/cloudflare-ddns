@@ -906,9 +906,9 @@ class CloudFlare:
             zone_id = self.__get_zone_id__(t_zone)
             self.__init_records_for_zone__(t_zone, **kwargs)
             for t_prefix in records_dict[t_zone]:
-                t_prefix_obj = records_dict[t_zone][t_prefix]
+                t_new_obj = records_dict[t_zone][t_prefix]
                 t_full_domain = f"{t_prefix}.{t_zone}"
-                for dns_type in t_prefix_obj:
+                for dns_type in t_new_obj:
                     dns_type = dns_type.upper()
                     # clean
                     t_current_records_dict = self.__get_records_for_domain_and_type__(
@@ -917,9 +917,9 @@ class CloudFlare:
                     # scan content list, find all exist records and non-exist records
                     t_non_exist_contents = []
                     t_exist_contents = []
-                    t_dns_obj = t_prefix_obj[dns_type]
-                    for t_content in t_dns_obj:
-                        t_ttl, t_proxied = t_dns_obj[t_content]
+                    t_n_dns_obj = t_new_obj[dns_type]
+                    for t_content in t_n_dns_obj:
+                        t_ttl, t_proxied = t_n_dns_obj[t_content]
                         if t_content in t_current_records_dict:
                             t_exist_contents.append(
                                 (t_content, t_ttl, t_proxied))
@@ -939,13 +939,15 @@ class CloudFlare:
                             # t_proxied = t_record['proxied']
                             t_prefix = str(t_name).removesuffix(f".{t_zone}")
                             if t_prefix not in records_dict[t_zone] or \
-                                    t_type not in t_prefix_obj or \
-                                    t_cont not in t_dns_obj:
+                                    t_type not in t_new_obj or \
+                                    t_cont not in t_n_dns_obj:
                                 t_extra_records.append(t_content)
                     # update for existing records
                     for t_content, t_ttl, t_proxied in t_exist_contents:
                         if t_content in t_current_records_dict:
                             t_record_id = t_current_records_dict[t_content]
+                            t_o_ttl = self.dns_records[t_record_id]['ttl']
+                            t_o_proxied = self.dns_records[t_record_id]['proxied']
                             if t_ttl != self.dns_records[t_record_id]['ttl'] or \
                                     t_proxied != self.dns_records[t_record_id]['proxied']:
                                 self.__update_record_by_id__(
@@ -957,23 +959,27 @@ class CloudFlare:
                                     proxied=t_proxied,
                                     **kwargs,
                                 )
-                                print(f"Update for [{t_full_domain}, "
-                                    f"{dns_type}, {t_content}]")
+                                print(f"Update {t_full_domain}, {dns_type}, {t_content}, from "
+                                      f"[{t_o_ttl}, {t_o_proxied}] to [{t_ttl}, {t_proxied}]")
                     # update t_extra_records according t_non_exist_contents
                     while len(t_extra_records) > 0 and len(t_non_exist_contents) > 0:
                         t_n_content, t_n_ttl, t_n_proxied = t_non_exist_contents[0]
                         t_record_id = t_current_records_dict[t_content]
+                        t_o_content = self.dns_records[t_record_id]['content']
+                        t_o_ttl = self.dns_records[t_record_id]['ttl']
+                        t_o_proxied = self.dns_records[t_record_id]['proxied']
                         self.__update_record_by_id__(
                             t_record_id,
                             t_full_domain,
-                            dns_type, 
-                            t_n_content, 
+                            dns_type,
+                            t_n_content,
                             ttl=t_n_ttl,
-                            proxied=t_n_proxied, 
+                            proxied=t_n_proxied,
                             **kwargs
                         )
-                        print(f"Update for [{t_full_domain}, "
-                                  f"{dns_type}, {t_content}]")
+                        print(f"Update {t_full_domain}, {dns_type}, from "
+                              f"[{t_o_content}, {t_o_ttl}, {t_o_proxied}] to "
+                              f"[{t_n_content}, {t_n_ttl}, {t_n_proxied}]")
                         del t_non_exist_contents[0]
                         del t_extra_records[0]
                     # delete extra records
@@ -984,7 +990,7 @@ class CloudFlare:
                         print(f"Delete [{t_full_domain}, "
                               f"{dns_type}, {t_content}]")
                     # add for non-exist records:
-                    for t_content, t_ttl, t_proxied  in t_non_exist_contents:
+                    for t_content, t_ttl, t_proxied in t_non_exist_contents:
                         self.__create_one_record__(
                             t_full_domain,
                             dns_type,
@@ -1052,6 +1058,17 @@ def split_content_list(content_list: list):
         t_list = split_content(str(t))
         t_list = [t for t in t_list if len(t) > 0]
         t_content_list.extend(t_list)
+    return list(set(t_content_list))
+
+
+def resolve_raw(raws: list):
+    t_content_list = []
+    if not raws or len(raws) == 0:
+        return t_content_list
+    for t in raws:
+        t_list = split_content_no_set(str(t))
+        t_list = [t for t in t_list if len(t) > 0]
+        t_content_list.append(t_list)
     return list(set(t_content_list))
 
 
@@ -1556,7 +1573,7 @@ def main():
     if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0):
         t_raw_list = []
         if args.raw and len(args.raw) > 0:
-            t_raw_list = split_content_list(args.raw)
+            t_raw_list.extend(args.raw)
         if args.raw_file and len(args.raw_file) > 0:
             try:
                 with open(args.raw_file, "r") as fp:
@@ -1587,13 +1604,14 @@ def main():
                     t_records_dict[t_zone][t_prefix] = {}
                 if t_dns_type not in t_records_dict[t_zone][t_prefix]:
                     t_records_dict[t_zone][t_prefix][t_dns_type] = {}
-                t_records_dict[t_zone][t_prefix][t_dns_type][t_content]=(t_ttl, str2bool(t_proxied))
+                t_records_dict[t_zone][t_prefix][t_dns_type][t_content] = (
+                    t_ttl, str2bool(t_proxied))
                 # t_records_dict[t_zone][t_prefix].update(gen_content_dict(
                 #     t_dns_type, [t_content], t_ttl, str2bool(t_proxied)))
     if (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
         t_raw_list = []
         if args.raw_alias and len(args.raw_alias) > 0:
-            t_raw_list = split_content_list(args.raw_alias)
+            t_raw_list.extend(args.raw_alias)
         if args.raw_alias_file and len(args.raw_alias_file) > 0:
             try:
                 with open(args.raw_alias_file, "r") as fp:
@@ -1626,7 +1644,8 @@ def main():
                     t_records_dict[t_zone][t_prefix] = {}
                 if t_dns_type not in t_records_dict[t_zone][t_prefix]:
                     t_records_dict[t_zone][t_prefix][t_dns_type] = {}
-                t_records_dict[t_zone][t_prefix][t_dns_type][t_content]=(t_ttl, str2bool(t_proxied))
+                t_records_dict[t_zone][t_prefix][t_dns_type][t_content] = (
+                    t_ttl, str2bool(t_proxied))
                 # t_records_dict[t_zone][t_prefix].update(gen_content_dict(
                 #     t_dns_type, [f"{t_content}.{t_zone}"], t_ttl, str2bool(t_proxied)))
     # only works when action_list_records or action_delete_records
