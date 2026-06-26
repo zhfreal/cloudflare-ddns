@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cloudflare-ddns"
-version = "2025.10.30"
+dynamic = ["version"]
 authors = [
   { name="zhfreal", email="zhfreal@gmail.com" },
 ]

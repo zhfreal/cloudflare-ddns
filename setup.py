@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
 # cython: language_level=3
 
+import re
+from pathlib import Path
 from setuptools import setup, find_packages
+
+ROOT = Path(__file__).resolve().parent
+VERSION_FILE = ROOT / "src" / "__init__.py"
+
+
+def read_version():
+    content = VERSION_FILE.read_text(encoding="utf-8")
+    match = re.search(
+        r'^__version__\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+    if not match:
+        raise RuntimeError("Unable to find version string in src/__init__.py")
+    return match.group(1)
 
 # Read requirements from requirements.txt
 # with open('requirements.txt', 'r') as f:
 #     requirements = f.read().splitlines()
 
+
 setup(
     name="cloudflare-ddns",
-    version="2025.10.30",
+    version=read_version(),
     author='zhfreal',
     author_email='zhfreal@gmail.com',
     description='maintain cloudflare ddns records',
