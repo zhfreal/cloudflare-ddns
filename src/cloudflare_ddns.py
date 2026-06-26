@@ -84,19 +84,28 @@ class CloudFlare:
     per_page = 200
 
     def __init__(
-            self, email: str, api_key: str, **kwargs
+            self,
+            email: str = "",
+            api_key: str = "",
+            api_token: str = "",
+            **kwargs
     ):
         """
         Initialization. It will set the zone information of the domain for operation.
         It will also get dns records of the current zone.
         :param email:
         :param api_key:
+        :param api_token:
         :param domain:
         :param proxied:
         """
         self.email = email
         self.api_key = api_key
-        self.headers = {"X-Auth-Key": api_key, "X-Auth-Email": email}
+        self.api_token = api_token
+        if self.api_token and len(self.api_token) > 0:
+            self.headers = {"Authorization": f"Bearer {self.api_token}"}
+        else:
+            self.headers = {"X-Auth-Key": api_key, "X-Auth-Email": email}
         # minimum ttl is 60 seconds
         # set ttl for basic record creatation or record update
         self.ttl = 300
@@ -1143,6 +1152,8 @@ options:
                         Email for your cloudflare account
   -k API_KEY, --api-key API_KEY
                         API Key of your cloudflare account
+      --api-token API_TOKEN
+                        API Token for Cloudflare with "Authorization: Bearer" authentication
   -z ZONE, --zone-id ZONE
                         zone id in cloudflare
   -a ALIAS, --alias ALIAS
@@ -1200,6 +1211,13 @@ def main():
         dest="api_key",
         type=str,
         help="API Key of your cloudflare account"
+    )
+    parser.add_argument(
+        "--api-token",
+        action="store",
+        dest="api_token",
+        type=str,
+        help='API Token for Cloudflare with "Authorization: Bearer" authentication'
     )
     cmd_group = parser.add_mutually_exclusive_group(required=False)
     cmd_group.add_argument(
@@ -1400,12 +1418,13 @@ def main():
     args = parser.parse_args()
     if args.version:
         sys.exit(0)
-    if not args.email or len(args.email) == 0:
-        print("No email!")
-        sys.exit(1)
-    if not args.api_key or len(args.api_key) == 0:
-        print("No API Key!")
-        sys.exit(1)
+    if not args.api_token or len(args.api_token) == 0:
+        if not args.email or len(args.email) == 0:
+            print("No email or API token provided!")
+            sys.exit(1)
+        if not args.api_key or len(args.api_key) == 0:
+            print("No API Key!")
+            sys.exit(1)
     # add, update and delete
     t_domains_list = []
     action_list_zones = False
@@ -1499,7 +1518,8 @@ def main():
             print(
                 "Please do not use \"--raw\" or \"--raw-file\" with \"--raw-alias\" or \"--raw-alias-file\" at the same time.")
             sys.exit(1)
-    cf = CloudFlare(email=args.email, api_key=args.api_key)
+    cf = CloudFlare(email=args.email, api_key=args.api_key,
+                    api_token=args.api_token)
     if action_list_zones:
         cf.list_zones()
         sys.exit(0)
