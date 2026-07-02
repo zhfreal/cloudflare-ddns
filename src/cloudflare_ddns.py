@@ -852,36 +852,94 @@ class CloudFlare:
             t_zone = t_zone.lower()
             self.__init_records_for_zone__(t_zone, **kwargs)
             zone_id = self.__get_zone_id__(t_zone)
-            for t_prefix in records_dict[t_zone]:
-                record_id_list_for_del = []
-                if len(records_dict[t_zone][t_prefix]) == 0:
-                    t_current_record_dict = self.__get_records_for_domain__(
-                        f"{t_prefix}.{t_zone}")
-                    for t_v in t_current_record_dict.values():
-                        for t_t_v in t_v.values():
-                            record_id_list_for_del.append(t_t_v)
-                else:
-                    for dns_type in records_dict[t_zone][t_prefix]:
+            
+            dns_types = kwargs.get("dns_types")
+            ipv4_addrs = kwargs.get("ipv4_addrs")
+            ipv6_addrs = kwargs.get("ipv6_addrs")
+            cname = kwargs.get("cname")
+            cname_alias = kwargs.get("cname_alias")
+            txt_records = kwargs.get("txt_records")
+
+            has_content_filters = bool(ipv4_addrs or ipv6_addrs or cname or cname_alias or txt_records)
+
+            prefixes = list(records_dict[t_zone].keys())
+            if not prefixes:
+                sub_domains = list(self.zones[t_zone]["records"].keys())
+            else:
+                sub_domains = [f"{pref}.{t_zone}" for pref in prefixes]
+
+            record_id_list_for_del = []
+            for t_sub_domain in sub_domains:
+                if t_sub_domain not in self.zones[t_zone]["records"]:
+                    continue
+                
+                t_prefix = t_sub_domain.removesuffix(f".{t_zone}")
+                prefix_types = []
+                if prefixes and records_dict[t_zone][t_prefix]:
+                    prefix_types = list(records_dict[t_zone][t_prefix].keys())
+                elif dns_types:
+                    prefix_types = dns_types
+
+                if prefix_types:
+                    for dns_type in prefix_types:
                         dns_type = dns_type.upper()
-                        t_current_record_dict = self.__get_records_for_domain_and_type__(
-                            t_zone, t_prefix, dns_type
-                        )
-                        for content in t_current_record_dict:
-                            record_id = t_current_record_dict[content]
-                            record_id_list_for_del.append(record_id)
-                for record_id in record_id_list_for_del:
-                    t_succ, _, dns_type, content = self.__delete_record_by_id__(
-                        zone_id, record_id, **kwargs
+                        if dns_type in self.zones[t_zone]["records"][t_sub_domain]:
+                            for content, record_id in self.zones[t_zone]["records"][t_sub_domain][dns_type].items():
+                                if has_content_filters:
+                                    matched = False
+                                    if dns_type == "A" and ipv4_addrs and content in ipv4_addrs:
+                                        matched = True
+                                    elif dns_type == "AAAA" and ipv6_addrs and content in ipv6_addrs:
+                                        matched = True
+                                    elif dns_type == "CNAME":
+                                        if cname and content == cname:
+                                            matched = True
+                                        elif cname_alias and (content == cname_alias or content == f"{cname_alias}.{t_zone}"):
+                                            matched = True
+                                    elif dns_type == "TXT" and txt_records and content in txt_records:
+                                        matched = True
+                                else:
+                                    matched = True
+                                
+                                if matched:
+                                    record_id_list_for_del.append((t_sub_domain, dns_type, content, record_id))
+                else:
+                    for dns_type, value in self.zones[t_zone]["records"][t_sub_domain].items():
+                        for content, record_id in value.items():
+                            if has_content_filters:
+                                matched = False
+                                if dns_type == "A" and ipv4_addrs and content in ipv4_addrs:
+                                    matched = True
+                                elif dns_type == "AAAA" and ipv6_addrs and content in ipv6_addrs:
+                                    matched = True
+                                elif dns_type == "CNAME":
+                                    if cname and content == cname:
+                                        matched = True
+                                    elif cname_alias and (content == cname_alias or content == f"{cname_alias}.{t_zone}"):
+                                        matched = True
+                                elif dns_type == "TXT" and txt_records and content in txt_records:
+                                    matched = True
+                            else:
+                                matched = True
+                            
+                            if matched:
+                                record_id_list_for_del.append((t_sub_domain, dns_type, content, record_id))
+
+
+            for t_sub, d_type, cont, record_id in record_id_list_for_del:
+                t_succ, _, dns_type, content = self.__delete_record_by_id__(
+                    zone_id, record_id, **kwargs
+                )
+                if t_succ:
+                    print(
+                        f"Succeed to delete [{t_sub}, {dns_type}, {content}]")
+                else:
+                    print(
+                        f"Warnig! Failed to delete "
+                        f"[{t_sub}, {dns_type}, {content}]"
                     )
-                    if t_succ:
-                        print(
-                            f"Succeed to delete [{t_prefix}.{t_zone}, {dns_type}, {content}]")
-                    else:
-                        print(
-                            f"Warnig! Failed to delete "
-                            f"[{t_prefix}.{t_zone}, {dns_type}, {content}]"
-                        )
-                    time.sleep(0.1)
+                time.sleep(0.1)
+
 
     # def update_records(self, name, dns_type, content_list: list, **kwargs):
     #     """
@@ -1808,6 +1866,15 @@ def main():
     elif action_add_records:
         cf.update_records_new(t_records_dict)
     elif action_delete_records:
-        cf.delete_records_new(t_records_dict)
+        cf.delete_records_new(
+            t_records_dict,
+            dns_types=split_content_list(args.dns_type) if args.dns_type else None,
+            ipv4_addrs=split_content_list(args.ipv4_addr) if args.ipv4_addr else None,
+            ipv6_addrs=split_content_list(args.ipv6_addr) if args.ipv6_addr else None,
+            cname=args.cname,
+            cname_alias=args.cname_alias,
+            txt_records=split_content_list(args.txt_record, dns_type="TXT") if args.txt_record else None
+        )
+
     else:
         print("Invalid operation!")
