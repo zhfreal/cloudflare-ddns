@@ -662,36 +662,63 @@ class CloudFlare:
     def list_records(self, records: dict, **kwargs):
         """
         List all records for a zone
-        :param records_dict: {<zone>: {"prefix": {<type>: {<content>: (ttl, proxied)}}}}
+        :param records: {<zone>: {"prefix": {<type>: {<content>: (ttl, proxied)}}}}
         :return:
         """
-        for t_zone in records:
+        dns_types = kwargs.get("dns_types")
+        ipv4_addrs = kwargs.get("ipv4_addrs")
+        ipv6_addrs = kwargs.get("ipv6_addrs")
+        cname = kwargs.get("cname")
+        cname_alias = kwargs.get("cname_alias")
+        txt_records = kwargs.get("txt_records")
+
+        has_content_filters = bool(ipv4_addrs or ipv6_addrs or cname or cname_alias or txt_records)
+        zones_to_list = records if records else self.zones
+
+        for t_zone in zones_to_list:
             self.__init_records_for_zone__(t_zone, **kwargs)
-            if records[t_zone] is None or len(records[t_zone]) == 0:
-                for t_domain, t_records in self.zones[t_zone]["records"].items():
-                    print(f"{t_domain}: ")
-                    for t_type, t_values in t_records.items():
-                        for t_content, t_id in t_values.items():
-                            if t_id in self.dns_records:
-                                print(self.dns_records[t_id])
-                return
-            for t_prefix in records[t_zone]:
-                t_sub_domain = f"{t_prefix}.{t_zone}"
-                if t_sub_domain in self.zones[t_zone]["records"]:
-                    t_record_id_list = []
-                    for key, value in self.zones[t_zone]["records"][t_sub_domain].items():
-                        if len(records[t_zone][t_prefix]) > 0:
-                            if key in records[t_zone][t_prefix]:
-                                for t_t_v in value.values():
-                                    t_record_id_list.append(t_t_v)
+            prefixes = list(records[t_zone].keys()) if (records and t_zone in records and records[t_zone]) else []
+
+            if prefixes:
+                sub_domains = [f"{pref}.{t_zone}" for pref in prefixes]
+            else:
+                sub_domains = list(self.zones[t_zone]["records"].keys())
+
+            for t_sub_domain in sub_domains:
+                if t_sub_domain not in self.zones[t_zone]["records"]:
+                    continue
+
+                t_record_id_list = []
+                for r_type, value in self.zones[t_zone]["records"][t_sub_domain].items():
+                    if dns_types and r_type not in dns_types:
+                        continue
+
+                    for t_content, t_id in value.items():
+                        if has_content_filters:
+                            matched = False
+                            if r_type == "A" and ipv4_addrs and t_content in ipv4_addrs:
+                                matched = True
+                            elif r_type == "AAAA" and ipv6_addrs and t_content in ipv6_addrs:
+                                matched = True
+                            elif r_type == "CNAME":
+                                if cname and t_content == cname:
+                                    matched = True
+                                elif cname_alias and (t_content == cname_alias or t_content == f"{cname_alias}.{t_zone}"):
+                                    matched = True
+                            elif r_type == "TXT" and txt_records and t_content in txt_records:
+                                matched = True
+                            
+                            if matched:
+                                t_record_id_list.append(t_id)
                         else:
-                            for t_t_v in value.values():
-                                t_record_id_list.append(t_t_v)
-                    if len(t_record_id_list) > 0:
-                        print(f"{t_sub_domain}: ")
-                        for t_id in t_record_id_list:
-                            if t_id in self.dns_records:
-                                print(self.dns_records[t_id])
+                            t_record_id_list.append(t_id)
+
+                if len(t_record_id_list) > 0:
+                    print(f"{t_sub_domain}: ")
+                    for t_id in t_record_id_list:
+                        if t_id in self.dns_records:
+                            print(self.dns_records[t_id])
+
 
     # def create_records(self, name, dns_type, content_list, **kwargs):
     #     """
@@ -1507,55 +1534,22 @@ def main():
     else:
         print("No valid cmd provided!")
         sys.exit(1)
-    if (args.ipv4_addr and len(args.ipv4_addr) > 0) or (args.ipv6_addr and len(args.ipv6_addr) > 0):
-        if (args.cname and len(args.cname) > 0) or (args.cname_alias and len(args.cname_alias) > 0):
-            print(
-                "Please do not use \"--cname\" or \"--cname-alias\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
-            sys.exit(1)
-        if args.txt_record and len(args.txt_record) > 0:
-            print(
-                "Please do not use \"--txt\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
-            sys.exit(1)
-        if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
-                (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
-            print(
-                "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
-                "or \"--raw-alias-file\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
-            sys.exit(1)
-        if args.zone and len(args.zone) > 0:
-            if not args.alias or len(args.alias) == 0:
+    if not action_list_records:
+        if (args.ipv4_addr and len(args.ipv4_addr) > 0) or (args.ipv6_addr and len(args.ipv6_addr) > 0):
+            if (args.cname and len(args.cname) > 0) or (args.cname_alias and len(args.cname_alias) > 0):
                 print(
-                    "Please use \"--alias\" with \"--zone\"")
+                    "Please do not use \"--cname\" or \"--cname-alias\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
                 sys.exit(1)
-            if args.domain and len(args.domain) > 0:
+            if args.txt_record and len(args.txt_record) > 0:
                 print(
-                    "Please do not use \"--domain\" with \"--zone\"")
+                    "Please do not use \"--txt\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
                 sys.exit(1)
-        elif not args.domain or len(args.domain) == 0:
-            print(
-                "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
-            sys.exit(1)
-    elif (args.cname and len(args.cname) > 0) or (args.cname_alias and len(args.cname_alias) > 0):
-        if args.txt_record and len(args.txt_record) > 0:
-            print(
-                "Please do not use \"--txt\" with \"--cname\" or \"--cname-alias\"")
-            sys.exit(1)
-        if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
-                (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
-            print(
-                "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
-                "or \"--raw-alias-file\" with \"--cname\" or \"--cname-alias\"")
-            sys.exit(1)
-        if args.cname_alias and len(args.cname_alias) > 0:
-            if not args.zone or len(args.zone) == 0 or not args.alias or len(args.alias) == 0:
+            if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
+                    (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
                 print(
-                    "Please use \"--zone\", \"--alias\" with \"--cname-alias\"")
+                    "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
+                    "or \"--raw-alias-file\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
                 sys.exit(1)
-            if args.domain and len(args.domain) > 0:
-                print(
-                    "Please do not use \"--domain\" with \"--cname-alias\"")
-                sys.exit(1)
-        else:
             if args.zone and len(args.zone) > 0:
                 if not args.alias or len(args.alias) == 0:
                     print(
@@ -1569,42 +1563,77 @@ def main():
                 print(
                     "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
                 sys.exit(1)
-    elif args.txt_record and len(args.txt_record) > 0:
-        if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
-                (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
-            print(
-                "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
-                "or \"--raw-alias-file\" with \"--txt\"")
-            sys.exit(1)
-        if args.zone and len(args.zone) > 0:
-            if not args.alias or len(args.alias) == 0:
+        elif (args.cname and len(args.cname) > 0) or (args.cname_alias and len(args.cname_alias) > 0):
+            if args.txt_record and len(args.txt_record) > 0:
                 print(
-                    "Please use \"--alias\" with \"--zone\"")
+                    "Please do not use \"--txt\" with \"--cname\" or \"--cname-alias\"")
                 sys.exit(1)
-            if args.domain and len(args.domain) > 0:
+            if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
+                    (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
                 print(
-                    "Please do not use \"--domain\" with \"--zone\"")
+                    "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
+                    "or \"--raw-alias-file\" with \"--cname\" or \"--cname-alias\"")
                 sys.exit(1)
-        elif not args.domain or len(args.domain) == 0:
-            print(
-                "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
-            sys.exit(1)
+            if args.cname_alias and len(args.cname_alias) > 0:
+                if not args.zone or len(args.zone) == 0 or not args.alias or len(args.alias) == 0:
+                    print(
+                        "Please use \"--zone\", \"--alias\" with \"--cname-alias\"")
+                    sys.exit(1)
+                if args.domain and len(args.domain) > 0:
+                    print(
+                        "Please do not use \"--domain\" with \"--cname-alias\"")
+                    sys.exit(1)
+            else:
+                if args.zone and len(args.zone) > 0:
+                    if not args.alias or len(args.alias) == 0:
+                        print(
+                            "Please use \"--alias\" with \"--zone\"")
+                        sys.exit(1)
+                    if args.domain and len(args.domain) > 0:
+                        print(
+                            "Please do not use \"--domain\" with \"--zone\"")
+                        sys.exit(1)
+                elif not args.domain or len(args.domain) == 0:
+                    print(
+                        "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
+                    sys.exit(1)
+        elif args.txt_record and len(args.txt_record) > 0:
+            if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
+                    (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
+                print(
+                    "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
+                    "or \"--raw-alias-file\" with \"--txt\"")
+                sys.exit(1)
+            if args.zone and len(args.zone) > 0:
+                if not args.alias or len(args.alias) == 0:
+                    print(
+                        "Please use \"--alias\" with \"--zone\"")
+                    sys.exit(1)
+                if args.domain and len(args.domain) > 0:
+                    print(
+                        "Please do not use \"--domain\" with \"--zone\"")
+                    sys.exit(1)
+            elif not args.domain or len(args.domain) == 0:
+                print(
+                    "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
+                sys.exit(1)
 
-    elif (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
-            (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
-        if (args.alias and len(args.alias) > 0) or (args.domain and len(args.domain) > 0):
-            print(
-                "Please do not use \"--alias\" or \"--domain\" with \"--raw\", \"--raw-alias\", \"--raw-file\" or \"--raw-alias-file\"")
-            sys.exit(1)
-        if not args.zone or len(args.zone) == 0:
-            print(
-                "Please use \"--zone\" with \"--raw\", \"--raw-alias\", \"--raw-file\" or \"--raw-alias-file\"")
-            sys.exit(1)
-        if ((args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0)) and \
-                ((args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0)):
-            print(
-                "Please do not use \"--raw\" or \"--raw-file\" with \"--raw-alias\" or \"--raw-alias-file\" at the same time.")
-            sys.exit(1)
+        elif (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
+                (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
+            if (args.alias and len(args.alias) > 0) or (args.domain and len(args.domain) > 0):
+                print(
+                    "Please do not use \"--alias\" or \"--domain\" with \"--raw\", \"--raw-alias\", \"--raw-file\" or \"--raw-alias-file\"")
+                sys.exit(1)
+            if not args.zone or len(args.zone) == 0:
+                print(
+                    "Please use \"--zone\" with \"--raw\", \"--raw-alias\", \"--raw-file\" or \"--raw-alias-file\"")
+                sys.exit(1)
+            if ((args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0)) and \
+                    ((args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0)):
+                print(
+                    "Please do not use \"--raw\" or \"--raw-file\" with \"--raw-alias\" or \"--raw-alias-file\" at the same time.")
+                sys.exit(1)
+
     cf = CloudFlare(email=args.email, api_key=args.api_key,
                     api_token=args.api_token)
     if action_list_zones:
@@ -1777,7 +1806,16 @@ def main():
                         t_records_dict[t_zone][t_prefix][t_dns_type] = {}
     # list records
     if action_list_records:
-        cf.list_records(t_records_dict)
+        cf.list_records(
+            t_records_dict,
+            dns_types=split_content_list(args.dns_type) if args.dns_type else None,
+            ipv4_addrs=split_content_list(args.ipv4_addr) if args.ipv4_addr else None,
+            ipv6_addrs=split_content_list(args.ipv6_addr) if args.ipv6_addr else None,
+            cname=args.cname,
+            cname_alias=args.cname_alias,
+            txt_records=split_content_list(args.txt_record, dns_type="TXT") if args.txt_record else None
+        )
+
     elif action_update_records:
         cf.update_records_new(t_records_dict)
     elif action_add_records:
