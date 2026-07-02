@@ -1099,21 +1099,7 @@ def split_content_list(content_list: list, dns_type: str = None):
         return t_content_list
     for t in content_list:
         if dns_type == "TXT":
-            import csv
-            t_list = []
-            delimiter = None
-            for d in [',', ';', '|']:
-                if d in str(t):
-                    delimiter = d
-                    break
-            if delimiter:
-                reader = csv.reader([str(t)], delimiter=delimiter, skipinitialspace=True)
-                try:
-                    t_list = next(reader)
-                except Exception:
-                    t_list = [str(t)]
-            else:
-                t_list = [str(t)]
+            t_list = [str(t)]
         else:
             t_list = split_content(str(t))
         t_list = [t for t in t_list if len(t) > 0]
@@ -1121,6 +1107,7 @@ def split_content_list(content_list: list, dns_type: str = None):
     if dns_type == "TXT":
         return list(dict.fromkeys(t_content_list))
     return list(set(t_content_list))
+
 
 
 def resolve_raw(raws: list):
