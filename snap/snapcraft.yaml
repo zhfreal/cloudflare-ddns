@@ -1,6 +1,7 @@
 name: cloudflare-ddns
 base: core22
-version: '26.06.26'
+version: '26.07.02'
+
 summary: An tool for manage dns records on cloudflare.com
 description: This tool can list domains, add update delete domains, list records, add and update delete records.
 grade: stable

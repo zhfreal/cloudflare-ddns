@@ -18,8 +18,9 @@ import urllib.parse
 import requests
 import re
 
-valid_record_type = ("A", "AAAA", "CNAME")
+valid_record_type = ("A", "AAAA", "CNAME", "TXT")
 RE_SPLITTER_WITH_WHITESPACE = re.compile(r"[;,|\s]+")
+
 
 
 class CloudFlareError(Exception):
@@ -446,7 +447,10 @@ class CloudFlare:
                 data["ttl"] = 1
         else:
             data["proxied"] = self.proxied
+        if dns_type == "TXT":
+            data["proxied"] = False
         t_succ, t_result_dict = self.__request__(
+
             self.api_url + zone_id + "/dns_records", "post", data=data, **kwargs
         )
         if not t_succ or "result" not in t_result_dict:
@@ -509,7 +513,10 @@ class CloudFlare:
                 data["ttl"] = 1
         else:
             data["proxied"] = self.proxied
+        if dns_type == "TXT":
+            data["proxied"] = False
         t_succ, t_result_dict = self.__request__(
+
             urllib.parse.urljoin(self.api_url, zone_id +
                                  "/dns_records/" + record_id),
             "put",
@@ -1049,7 +1056,7 @@ def print_logs(t_u: list, t_c: list, t_d: list, t_k: list):
 
 def gen_content_dict(dns_type: str, content_list: list, ttl: int, proxied: bool, **kwargs):
     t_content_dict = {dns_type: {}}
-    t_content_list = split_content_list(content_list)
+    t_content_list = split_content_list(content_list, dns_type=dns_type)
     for c in t_content_list:
         t_content_dict[dns_type][c] = (ttl, proxied)
     return t_content_dict
@@ -1059,14 +1066,33 @@ def is_valid_dns_type(dns_type: str):
     return dns_type.upper() in valid_record_type
 
 
-def split_content_list(content_list: list):
+def split_content_list(content_list: list, dns_type: str = None):
     t_content_list = []
     if not content_list or len(content_list) == 0:
         return t_content_list
     for t in content_list:
-        t_list = split_content(str(t))
+        if dns_type == "TXT":
+            import csv
+            t_list = []
+            delimiter = None
+            for d in [',', ';', '|']:
+                if d in str(t):
+                    delimiter = d
+                    break
+            if delimiter:
+                reader = csv.reader([str(t)], delimiter=delimiter, skipinitialspace=True)
+                try:
+                    t_list = next(reader)
+                except Exception:
+                    t_list = [str(t)]
+            else:
+                t_list = [str(t)]
+        else:
+            t_list = split_content(str(t))
         t_list = [t for t in t_list if len(t) > 0]
         t_content_list.extend(t_list)
+    if dns_type == "TXT":
+        return list(dict.fromkeys(t_content_list))
     return list(set(t_content_list))
 
 
@@ -1090,6 +1116,27 @@ def split_content_no_set(content: str):
     t_re_rules = RE_SPLITTER_WITH_WHITESPACE
     t_list = t_re_rules.split(str(content))
     return t_list
+
+
+def parse_raw_line(t_raw: str) -> list:
+    delimiter = ','
+    if ';' in t_raw and ',' not in t_raw:
+        delimiter = ';'
+    elif '|' in t_raw and ',' not in t_raw:
+        delimiter = '|'
+    elif ',' not in t_raw and ';' not in t_raw and '|' not in t_raw:
+        import shlex
+        try:
+            return shlex.split(t_raw)
+        except Exception:
+            pass
+    import csv
+    reader = csv.reader([t_raw], delimiter=delimiter, skipinitialspace=True)
+    try:
+        return next(reader)
+    except Exception:
+        return RE_SPLITTER_WITH_WHITESPACE.split(t_raw)
+
 
 
 def sort_zones(zones: list):
@@ -1120,7 +1167,7 @@ def custom_help():
   UPDATE:
   3. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --update-record \\
         <-d DOMAIN [-d domain]... | -z ZONE [-z ZONE]... -a ALIAS [-a ALIAS]...>  \\
-        [[-4 IPV4_ADDR]... [-6 IPV6_ADDR]... | [-c CNAME | --cname-alias ALIAS] | \\
+        [[-4 IPV4_ADDR]... [-6 IPV6_ADDR]... | [-c CNAME | --cname-alias ALIAS] | [-x TXT] | \\
         [-t TTL] [--proxied [PROXIED]
   4. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --update-record \\
         <-z ZONE [-z ZONE]...> <-r RAW | --raw-file RAW_FILE] | [--raw-alias ALIAS | --raw-alias-file ALIAS_FILE]> \\
@@ -1128,7 +1175,7 @@ def custom_help():
   CREATE:
   5. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --add-record \\
         <-d DOMAIN [-d domain]... | -z ZONE [-z ZONE]... -a ALIAS [-a ALIAS]...>  \\
-        [[-4 IPV4_ADDR]... [-6 IPV6_ADDR]... | [-c CNAME | --cname-alias ALIAS] | \\
+        [[-4 IPV4_ADDR]... [-6 IPV6_ADDR]... | [-c CNAME | --cname-alias ALIAS] | [-x TXT] | \\
         [-t TTL] [--proxied [PROXIED]
   6. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --add-record \\
         <-z ZONE [-z ZONE]...> <-r RAW | --raw-file RAW_FILE] | [--raw-alias ALIAS | --raw-alias-file ALIAS_FILE]> \\
@@ -1136,7 +1183,7 @@ def custom_help():
   DELETE:
   7. python3 cloudflare-ddns.py [-e EMAIL] [-k API_KEY] --delete-record \\
         <-d DOMAIN [-d domain]... | -z ZONE [-z ZONE] -a ALIAS [-a ALIAS]...>  \\
-        [[-4 IPV4_ADDR]... [-6 IPV6_ADDR]... [-c CNAME | --cname-alias ALIAS] | \\
+        [[-4 IPV4_ADDR]... [-6 IPV6_ADDR]... [-c CNAME | --cname-alias ALIAS] [-x TXT] | \\
         [-r RAW | --raw-file RAW_FILE] | [--raw-alias ALIAS | --raw-alias-file ALIAS_FILE] | [--dns-type DNS_TYPE]]
 
 command arguments:
@@ -1168,6 +1215,7 @@ options:
                         cname for action
   --cname-alias CNAME_ALIAS
                         alias of cname content while do add or update. For example, '-a example.com,example.com --alias ww1 --cname-alias w1'
+  -x TXT, --txt TXT     TXT record content for action
   --dns-type DNS_TYPE   dns type for delete
   -t TTL, --ttl TTL     ttl for record
   --proxied [PROXIED]   It should be proxied
@@ -1192,7 +1240,8 @@ def main():
     from src import __version__
     print(f"cloudflare-ddns {__version__}")
     print("  - a DDNS helper for Cloudflare.")
-    print('  - create, delete or update dns record for dns type "A|AAAA|CNAME".')
+    print('  - create, delete or update dns record for dns type "A|AAAA|CNAME|TXT".')
+
     print("")
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1346,6 +1395,15 @@ def main():
              "For example, '-a example.com,example.com --alias ww1 --cname-alias w1'"
     )
     parser.add_argument(
+        "-x",
+        "--txt",
+        action="append",
+        dest="txt_record",
+        type=str,
+        help="TXT record for action"
+    )
+
+    parser.add_argument(
         "--dns-type",
         action="append",
         dest="dns_type",
@@ -1454,6 +1512,10 @@ def main():
             print(
                 "Please do not use \"--cname\" or \"--cname-alias\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
             sys.exit(1)
+        if args.txt_record and len(args.txt_record) > 0:
+            print(
+                "Please do not use \"--txt\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
+            sys.exit(1)
         if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
                 (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
             print(
@@ -1474,6 +1536,10 @@ def main():
                 "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
             sys.exit(1)
     elif (args.cname and len(args.cname) > 0) or (args.cname_alias and len(args.cname_alias) > 0):
+        if args.txt_record and len(args.txt_record) > 0:
+            print(
+                "Please do not use \"--txt\" with \"--cname\" or \"--cname-alias\"")
+            sys.exit(1)
         if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
                 (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
             print(
@@ -1503,6 +1569,27 @@ def main():
                 print(
                     "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
                 sys.exit(1)
+    elif args.txt_record and len(args.txt_record) > 0:
+        if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
+                (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
+            print(
+                "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
+                "or \"--raw-alias-file\" with \"--txt\"")
+            sys.exit(1)
+        if args.zone and len(args.zone) > 0:
+            if not args.alias or len(args.alias) == 0:
+                print(
+                    "Please use \"--alias\" with \"--zone\"")
+                sys.exit(1)
+            if args.domain and len(args.domain) > 0:
+                print(
+                    "Please do not use \"--domain\" with \"--zone\"")
+                sys.exit(1)
+        elif not args.domain or len(args.domain) == 0:
+            print(
+                "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
+            sys.exit(1)
+
     elif (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
             (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
         if (args.alias and len(args.alias) > 0) or (args.domain and len(args.domain) > 0):
@@ -1590,6 +1677,13 @@ def main():
                     t_content = args.cname_alias + f".{t_zone}"
                 t_records_dict[t_zone][t_prefix].update(gen_content_dict(
                     "CNAME", [t_content], args.ttl, args.proxied))
+    # resolve txt
+    if args.txt_record and len(args.txt_record) > 0:
+        t_txt_list = split_content_list(args.txt_record, dns_type="TXT")
+        for t_zone in t_records_dict:
+            for t_prefix in t_records_dict[t_zone]:
+                t_records_dict[t_zone][t_prefix].update(gen_content_dict(
+                    "TXT", t_txt_list, args.ttl, args.proxied))
     if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0):
         t_raw_list = []
         if args.raw and len(args.raw) > 0:
@@ -1606,7 +1700,7 @@ def main():
                 print(f"failed to read --raw-file {args.raw_file}")
                 raise E
         for t_raw in t_raw_list:
-            t_line_list = split_content_no_set(t_raw)
+            t_line_list = parse_raw_line(t_raw)
             if len(t_line_list) != 5:
                 print(f"invalid raw content {t_raw}")
                 sys.exit(1)
@@ -1644,10 +1738,11 @@ def main():
                 print(f"failed to read --raw-alias-file {args.raw_alias_file}")
                 raise E
         for t_raw in t_raw_list:
-            t_line_list = split_content_no_set(t_raw)
+            t_line_list = parse_raw_line(t_raw)
             if len(t_line_list) != 5:
                 print(f"invalid raw content {t_raw}")
                 sys.exit(1)
+
             # t_content is just prefix in --raw-alias or --raw-alias-file
             t_prefix, t_dns_type, t_content, t_ttl, t_proxied = t_line_list
             t_content = t_content + f".{t_zone}"
