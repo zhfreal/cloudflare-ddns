@@ -5,7 +5,7 @@ VERSION=26.07.25
 
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo 'unknown')
 BUILD_DATE=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-LDFLAGS=-ldflags "-X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION) -X github.com/zhfreal/cloudflare-ddns/pkg/version.GitCommit=$(GIT_COMMIT) -X github.com/zhfreal/cloudflare-ddns/pkg/version.BuildDate=$(BUILD_DATE)"
+LDFLAGS=-ldflags "-s -w -X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION) -X github.com/zhfreal/cloudflare-ddns/pkg/version.GitCommit=$(GIT_COMMIT) -X github.com/zhfreal/cloudflare-ddns/pkg/version.BuildDate=$(BUILD_DATE)"
 
 help:
 	@echo "Available commands:"
@@ -19,6 +19,10 @@ help:
 build:
 	mkdir -p dist
 	go build $(LDFLAGS) -o dist/$(BINARY_NAME) ./cmd/cloudflare-ddns
+	@if command -v upx >/dev/null 2>&1; then \
+		echo "Compressing local binary with UPX..."; \
+		upx --best dist/$(BINARY_NAME); \
+	fi
 
 build-all: clean
 	mkdir -p dist
@@ -30,6 +34,10 @@ build-all: clean
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-windows-amd64.exe ./cmd/cloudflare-ddns
 	GOOS=windows GOARCH=amd64 GOAMD64=v3 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-windows-amd64v3.exe ./cmd/cloudflare-ddns
 	GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o dist/$(BINARY_NAME)-windows-arm64.exe ./cmd/cloudflare-ddns
+	@if command -v upx >/dev/null 2>&1; then \
+		echo "Compressing supported release binaries with UPX..."; \
+		upx --best dist/$(BINARY_NAME)-linux-amd64 dist/$(BINARY_NAME)-linux-amd64v3 dist/$(BINARY_NAME)-linux-arm64 dist/$(BINARY_NAME)-windows-amd64.exe dist/$(BINARY_NAME)-windows-amd64v3.exe || true; \
+	fi
 
 build-release: build-all
 
