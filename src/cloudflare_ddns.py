@@ -7,16 +7,19 @@ try:
     from gevent import monkey
 
     monkey.patch_all(ssl=True)
-except Exception as _:
+except ImportError:
     pass
 from copy import deepcopy
 import sys
 import argparse
 import json
+import logging
 import time
-import urllib.parse
-import requests
 import re
+
+import requests
+
+logger = logging.getLogger("cloudflare_ddns")
 
 valid_record_type = ("A", "AAAA", "CNAME", "TXT")
 RE_SPLITTER_WITH_WHITESPACE = re.compile(r"[;,|\s]+")
@@ -53,29 +56,7 @@ class CloudFlare:
     """
 
     api_url = "https://api.cloudflare.com/client/v4/zones/"
-    email = ""
-    api_key = ""
-    proxied = False
-    headers = None
-    domain = None
-    zone = None
-    dns_records = {}
-    # zone's value like
-    # {
-    #         "a.com": {
-    #             "id": "12345678",
-    #             "records": {
-    #                 "b.a.com": {
-    #                     "A": {
-    #                         "1.1.1.1": "123456" // <content > : < ID >
-    #                     }
-    #                 }
-    #             }
-    #         }
-    #     }
-    zones = {}
-    # zones_list = []
-    zones_id = {}
+
     http_proxies_default = {"http_proxy": "", "https_proxy": ""}
     public_ip_finder = (
         "https://api64.ipify.org/",
@@ -103,6 +84,13 @@ class CloudFlare:
         self.email = email
         self.api_key = api_key
         self.api_token = api_token
+        self.proxied = False
+        self.headers = None
+        self.domain = None
+        self.zone = None
+        self.dns_records = {}
+        self.zones = {}
+        self.zones_id = {}
         if self.api_token and len(self.api_token) > 0:
             self.headers = {"Authorization": f"Bearer {self.api_token}"}
         else:
@@ -113,13 +101,13 @@ class CloudFlare:
         if kwargs.get("ttl") and isinstance(kwargs["ttl"], int) and kwargs["ttl"] >= 60:
             self.ttl = kwargs["ttl"]
         # set proxies for connection between local to cloudflare
-        self.http_proxies = CloudFlare.__get_http_proxies__(
+        self.http_proxies = CloudFlare._get_http_proxies(
             copy_proxy=True, **kwargs)
         # self.__setup_zone__()
-        self.__init_zones__()
+        self._init_zones()
 
     @classmethod
-    def __get_http_proxies__(cls, copy_proxy: bool = True, **kwargs):
+    def _get_http_proxies(cls, copy_proxy: bool = True, **kwargs):
         """
         create http proxies for request, it's a class method
         :param copy_proxy: if it's True: http_proxy will be same
@@ -149,15 +137,15 @@ class CloudFlare:
                 t_proxies["https_proxy"] = t_proxies["http_proxy"]
         return t_proxies
 
-    def __set_http_proxies__(self, **kwargs):
-        t_http_proxies = CloudFlare.__get_http_proxies__(
+    def _set_http_proxies(self, **kwargs):
+        t_http_proxies = CloudFlare._get_http_proxies(
             copy_proxy=False, **kwargs)
         if len(t_http_proxies["http_proxy"]) > 0:
             self.http_proxies["http_proxy"] = t_http_proxies["http_proxy"]
         if len(t_http_proxies["https_proxy"]) > 0:
             self.http_proxies["https_proxy"] = t_http_proxies["https_proxy"]
 
-    def __request__(self, url, method, data=None, **kwargs):
+    def _request(self, url, method, data=None, **kwargs):
         """
         The requester shortcut to submit a http request to CloutFlare
         :param url:
@@ -165,13 +153,14 @@ class CloudFlare:
         :param data:
         :return:
         """
-        t_http_proxies = CloudFlare.__get_http_proxies__(
+        t_http_proxies = CloudFlare._get_http_proxies(
             copy_proxy=True, **kwargs)
         method_method = getattr(requests, method)
         t_try = 0
         payload = {}
         if kwargs.get("params"):
             payload = kwargs["params"]
+
         while t_try < 3:
             try:
                 t_rsp = method_method(
@@ -183,8 +172,9 @@ class CloudFlare:
                     timeout=10,
                 )
                 if t_rsp.status_code != 200:
-                    print(
-                        f"Request {url} using method - {method} with header {self.headers} and data {data}, got {t_rsp}"
+                    redacted_headers = {k: "REDACTED" if k.lower() in ("x-auth-key", "authorization") else v for k, v in (self.headers or {}).items()}
+                    logger.error(
+                        f"Request {url} using method - {method} with header {redacted_headers} and data {data}, got {t_rsp} - {t_rsp.text}"
                     )
                     return False, requests.HTTPError(t_rsp.reason)
                 t_result = json.loads(t_rsp.text)
@@ -197,11 +187,13 @@ class CloudFlare:
                     requests.Timeout,
                     requests.ReadTimeout,
             ) as e:
-                print(
+                redacted_headers = {k: "REDACTED" if k.lower() in ("x-auth-key", "authorization") else v for k, v in (self.headers or {}).items()}
+                logger.warning(
                     f"Request {url} using method - {method} "
-                    f"with header {self.headers} and data {data}, got {str(e)}"
+                    f"with header {redacted_headers} and data {data}, got {str(e)}"
                 )
-                print("retry!")
+                logger.info(f"retry! (attempt {t_try + 1}/3)")
+                time.sleep(2 ** t_try)
                 t_try += 1
             except Exception as e:
                 return False, e
@@ -239,7 +231,7 @@ class CloudFlare:
             return domain
         return domain + "." + zone_name
 
-    def __init_zones__(self, **kwargs):
+    def _init_zones(self, **kwargs):
         """
         Setup all zones and their records.
         self.zones like {
@@ -261,7 +253,7 @@ class CloudFlare:
         while True:
             payload = {"page": page, "per_page": self.per_page}
             # Initialize current zone
-            t_succ, t_result_dict = self.__request__(
+            t_succ, t_result_dict = self._request(
                 self.api_url, "get", None, params=payload, **kwargs
             )
             if not t_succ or "result" not in t_result_dict:
@@ -284,7 +276,7 @@ class CloudFlare:
                 page += 1
         # self.zones_list = sort_zones(self.zones_list)
 
-    def __init_records_for_zone__(self, zone_name, **kwargs):
+    def _init_records_for_zone(self, zone_name, **kwargs):
         if zone_name not in self.zones:
             raise CloudFlareError(
                 f"Can't find zone {zone_name} for you. Please check with Cloudflare!"
@@ -306,7 +298,7 @@ class CloudFlare:
         fetched = 0
         while True:
             payload = {"page": page, "per_page": self.per_page}
-            t_succ, t_result_dict = self.__request__(
+            t_succ, t_result_dict = self._request(
                 self.api_url + zone_id + "/dns_records",
                 "get",
                 None,
@@ -353,14 +345,14 @@ class CloudFlare:
                 page += 1
         self.zones[zone_name]["records"].update(dns_records)
 
-    def __get_records_for_zone__(self, zone_name):
+    def _get_records_for_zone(self, zone_name):
         if zone_name not in self.zones:
             raise CloudFlareError(
                 f"Can't find zone {zone_name} for you. Please check with Cloudflare!"
             )
         return self.zones[zone_name]["records"]
 
-    def __get_zone_name_from_id__(self, zone_id: str):
+    def _get_zone_name_from_id(self, zone_id: str):
         """
         Get zone name from zone id
         :param zone_id: zone id
@@ -371,49 +363,49 @@ class CloudFlare:
                 return zone_name
         raise CloudFlareError(f"Can't find zone for id {zone_id}")
 
-    def __init_records_for_sub_domain__(self, full_sub_domain, **kwargs):
+    def _init_records_for_sub_domain(self, full_sub_domain, **kwargs):
         prefix, zone_name = self.split_domain(full_sub_domain)
         if len(prefix) == 0 or len(zone_name) == 0 or zone_name not in self.zones:
             raise CloudFlareError(
                 f"Can't find zone {zone_name} for you. Please check with Cloudflare!"
             )
-        self.__init_records_for_zone__(
+        self._init_records_for_zone(
             zone_name, domain=full_sub_domain, **kwargs)
 
-    def __get_records_for_domain__(self, full_sub_domain: str):
-        zone_name = self.__get_zone_name__(full_sub_domain)
-        t_records = self.__get_records_for_zone__(zone_name)
+    def _get_records_for_domain(self, full_sub_domain: str):
+        zone_name = self._get_zone_name(full_sub_domain)
+        t_records = self._get_records_for_zone(zone_name)
         if full_sub_domain in t_records:
             return t_records[full_sub_domain]
         return {}
 
-    def __get_records_for_domain_and_type__(self, zone: str, prefix: str, dns_type: str):
+    def _get_records_for_domain_and_type(self, zone: str, prefix: str, dns_type: str):
         full_sub_domain = f"{prefix}.{zone}" if prefix else zone
-        t_records = self.__get_records_for_domain__(full_sub_domain)
+        t_records = self._get_records_for_domain(full_sub_domain)
         records = {}
         dns_type = dns_type.strip().upper()
         if dns_type in t_records:
             records.update(t_records[dns_type])
         return records
 
-    def __get_record_id_for_domain_type_and_content__(
+    def _get_record_id_for_domain_type_and_content(
             self, zone: str, prefix: str, dns_type: str, content: str
     ):
         dns_type = dns_type.strip().upper()
         full_sub_domain = f"{prefix}.{zone}" if prefix else zone
-        t_records = self.__get_records_for_domain_and_type__(
+        t_records = self._get_records_for_domain_and_type(
             zone, prefix, dns_type)
         if content in t_records:
             return t_records[content]
 
-    def __get_zone_id__(self, full_sub_domain: str):
+    def _get_zone_id(self, full_sub_domain: str):
         full_sub_domain = full_sub_domain.strip().strip(".").strip()
-        zone_name = self.__get_zone_name__(full_sub_domain)
+        zone_name = self._get_zone_name(full_sub_domain)
         if len(zone_name) > 0:
             return self.zones[zone_name]["id"]
         raise CloudFlareError(f"Can't find zone for domain {full_sub_domain}")
 
-    def __get_zone_name__(self, full_sub_domain: str):
+    def _get_zone_name(self, full_sub_domain: str):
         full_sub_domain = full_sub_domain.strip().strip(".").strip()
         if full_sub_domain in self.zones:
             return full_sub_domain
@@ -422,7 +414,7 @@ class CloudFlare:
             return zone_name
         raise CloudFlareError(f"Can't find zone for domain {full_sub_domain}")
 
-    def __create_one_record__(self, name, dns_type, content, **kwargs):
+    def _create_one_record(self, name, dns_type, content, **kwargs):
         """
         Create a dns record
         :param dns_type:
@@ -431,8 +423,8 @@ class CloudFlare:
         :param kwargs:
         :return:
         """
-        zone_id = self.__get_zone_id__(name)
-        zone_name = self.__get_zone_name__(name)
+        zone_id = self._get_zone_id(name)
+        zone_name = self._get_zone_name(name)
         data = {"type": dns_type, "name": name, "content": content}
         if kwargs.get("ttl") is not None and isinstance(kwargs["ttl"], int):
             data["ttl"] = kwargs["ttl"]
@@ -447,7 +439,7 @@ class CloudFlare:
             data["proxied"] = self.proxied
         if dns_type == "TXT":
             data["proxied"] = False
-        t_succ, t_result_dict = self.__request__(
+        t_succ, t_result_dict = self._request(
 
             self.api_url + zone_id + "/dns_records", "post", data=data, **kwargs
         )
@@ -468,7 +460,7 @@ class CloudFlare:
             t_record["id"]
         return t_record
 
-    def __update_record_by_id__(
+    def _update_record_by_id(
             self, record_id, name, dns_type, content, **kwargs
     ) -> dict:
         """
@@ -482,8 +474,8 @@ class CloudFlare:
         """
         name = name.lower()
         dns_type = dns_type.upper()
-        zone_id = self.__get_zone_id__(name)
-        zone_name = self.__get_zone_name__(name)
+        zone_id = self._get_zone_id(name)
+        zone_name = self._get_zone_name(name)
         # do double check
         if record_id not in self.dns_records:
             raise CloudFlareError(f"Can't find record id "
@@ -513,10 +505,9 @@ class CloudFlare:
             data["proxied"] = self.proxied
         if dns_type == "TXT":
             data["proxied"] = False
-        t_succ, t_result_dict = self.__request__(
+        t_succ, t_result_dict = self._request(
 
-            urllib.parse.urljoin(self.api_url, zone_id +
-                                 "/dns_records/" + record_id),
+            self.api_url + zone_id + "/dns_records/" + record_id,
             "put",
             data=data,
             **kwargs,
@@ -535,7 +526,7 @@ class CloudFlare:
             self.zones[zone_name]["records"][name][dns_type][content] = record_id
         return t_result_dict["result"]
 
-    def __delete_record_by_id__(self, zone_id, record_id, **kwargs):
+    def _delete_record_by_id(self, zone_id, record_id, **kwargs):
         """
         Delete a dns record
         :param zone_id:
@@ -549,7 +540,7 @@ class CloudFlare:
         record = self.dns_records[record_id]
         content = record["content"]
         name = record["name"]
-        zone_name = self.__get_zone_name_from_id__(zone_id)
+        zone_name = self._get_zone_name_from_id(zone_id)
         dns_type = record["type"]
         if "records" not in self.zones[zone_name] or \
             name not in self.zones[zone_name]["records"] or \
@@ -565,9 +556,8 @@ class CloudFlare:
                 f"Inconsistent record {record_id} and {name}: "
                 f"{dns_type}, {content} in local cache"
             )
-        t_succ, t_result_dict = self.__request__(
-            urllib.parse.urljoin(self.api_url, zone_id +
-                                 "/dns_records/" + record_id),
+        t_succ, t_result_dict = self._request(
+            self.api_url + zone_id + "/dns_records/" + record_id,
             "delete",
             None,
             **kwargs,
@@ -587,8 +577,8 @@ class CloudFlare:
     #     Shortcut for setup zone
     #     :return:
     #     """
-    #     self.__set_http_proxies__(**kwargs)
-    #     self.__init_zones__(**kwargs)
+    #     self._set_http_proxies(**kwargs)
+    #     self._init_zones(**kwargs)
     #     # self.__setup_zone__(**kwargs)
 
     def list_zones(self, **kwargs):
@@ -597,7 +587,7 @@ class CloudFlare:
         :return:
         """
         for key, _ in self.zones.items():
-            print(key)
+            logger.info(key)
 
     def is_zone(self, domain: str, **kwargs):
         """
@@ -647,7 +637,7 @@ class CloudFlare:
                 prefix = domain.removesuffix("." + zone)
                 prefix = prefix.strip(".")
                 return (prefix, zone)
-        return ()
+        return ("", "")
 
     def list_record_for_zone(self, zone: str, **kwargs):
         """
@@ -656,12 +646,13 @@ class CloudFlare:
         :return:
         """
         zone_name = zone.strip().strip(".").strip().lower()
-        self.__init_records_for_zone__(zone_name, **kwargs)
+        self._init_records_for_zone(zone_name, **kwargs)
         for key, value in self.zones[zone_name]["records"].items():
-            print(f"{key}: ")
-            for v in value.values():
-                for t_v in v["values"]:
-                    print(t_v)
+            logger.info(f"{key}: ")
+            for dns_type, records in value.items():
+                for t_content, t_id in records.items():
+                    if t_id in self.dns_records:
+                        logger.info(self.dns_records[t_id])
 
     def list_records(self, records: dict, **kwargs):
         """
@@ -680,7 +671,7 @@ class CloudFlare:
         zones_to_list = records if records else self.zones
 
         for t_zone in zones_to_list:
-            self.__init_records_for_zone__(t_zone, **kwargs)
+            self._init_records_for_zone(t_zone, **kwargs)
             prefixes = list(records[t_zone].keys()) if (records and t_zone in records and records[t_zone]) else []
 
             if prefixes:
@@ -718,10 +709,10 @@ class CloudFlare:
                             t_record_id_list.append(t_id)
 
                 if len(t_record_id_list) > 0:
-                    print(f"{t_sub_domain}: ")
+                    logger.info(f"{t_sub_domain}: ")
                     for t_id in t_record_id_list:
                         if t_id in self.dns_records:
-                            print(self.dns_records[t_id])
+                            logger.info(self.dns_records[t_id])
 
 
     # def create_records(self, name, dns_type, content_list, **kwargs):
@@ -735,19 +726,19 @@ class CloudFlare:
     #     """
     #     name = name.lower()
     #     dns_type = dns_type.upper()
-    #     self.__init_records_for_sub_domain__(name, **kwargs)
+    #     self._init_records_for_sub_domain(name, **kwargs)
     #     content_list = list(set(content_list))
     #     if dns_type == "CNAME" and len(content_list) > 1:
-    #         print(
+    #         logger.info(
     #             f"WARNING! Can't create more than one records for ({name}, {dns_type}), {
     #                 dns_type} just one record permitted!"
     #         )
     #         return
-    #     t_records_dict = self.__get_records_for_domain_and_type__(
+    #     t_records_dict = self._get_records_for_domain_and_type(
     #         name, dns_type)
     #     # just check for CNAME, CNAME need just one record
     #     # if dns_type == "CNAME" and len(t_records_list) > 1:
-    #     #     print(f"WARNING! Escape exists record ({name}, {dns_type}, {t_content}), {dns_type} just one record permitted!")
+    #     #     logger.warning(f"WARNING! Escape exists record ({name}, {dns_type}, {t_content}), {dns_type} just one record permitted!")
     #     #     return
     #     # check records exist or not,
     #     #    keep the content and its record id.
@@ -755,16 +746,16 @@ class CloudFlare:
     #     t_non_exist_content = []
     #     for t_content in content_list:
     #         if t_content in t_records_dict:
-    #             print(
+    #             logger.info(
     #                 f"Escape existing record ({name}, {dns_type}, {t_content})")
     #         else:
     #             t_non_exist_content.append(t_content)
     #     # do create for non-exist records
     #     # t_created_dict = {}
     #     for t_content in t_non_exist_content:
-    #         self.__create_one_record__(name, dns_type, t_content, **kwargs)
+    #         self._create_one_record(name, dns_type, t_content, **kwargs)
     #         # t_created_dict[(name, dns_type, t_content)] = t_result
-    #         print(
+    #         logger.info(
     #             f"Succeed to created a record ({name}, {dns_type}, {t_content})")
     #         time.sleep(0.1)
 
@@ -777,19 +768,19 @@ class CloudFlare:
         """
         for t_zone in records_dict:
             t_zone = t_zone.lower()
-            self.__init_records_for_zone__(t_zone, **kwargs)
-            self.__get_records_for_zone__(t_zone)
+            self._init_records_for_zone(t_zone, **kwargs)
+            self._get_records_for_zone(t_zone)
             for t_prefix in records_dict[t_zone]:
                 t_sub_domain = f"{t_prefix}.{t_zone}" if t_prefix else t_zone
                 for dns_type in records_dict[t_zone][t_prefix]:
                     dns_type = dns_type.upper()
-                    t_records_dict = self.__get_records_for_domain_and_type__(
+                    t_records_dict = self._get_records_for_domain_and_type(
                         t_zone, t_prefix, dns_type
                     )
                     t_non_exist_content = []
                     for t_content in records_dict[t_zone][t_prefix][dns_type]:
                         if t_content in t_records_dict:
-                            print(
+                            logger.info(
                                 f"Escape existing record ({t_sub_domain}, "
                                 f"{dns_type}, {t_content})"
                             )
@@ -800,7 +791,7 @@ class CloudFlare:
                     # do create for non-exist records
                     # t_created_dict = {}
                     for t_content, t_ttl, t_proxied in t_non_exist_content:
-                        self.__create_one_record__(
+                        self._create_one_record(
                             t_sub_domain,
                             dns_type,
                             t_content,
@@ -809,7 +800,7 @@ class CloudFlare:
                             **kwargs,
                         )
                         # t_created_dict[(name, dns_type, t_content)] = t_result
-                        print(
+                        logger.info(
                             f"Succeed to created a record ({t_sub_domain}, {dns_type},"
                             f" {t_content})"
                         )
@@ -825,23 +816,23 @@ class CloudFlare:
     #     """
     #     name = name.lower()
     #     dns_type = dns_type.upper()
-    #     self.__init_records_for_sub_domain__(name, **kwargs)
+    #     self._init_records_for_sub_domain(name, **kwargs)
     #     # reset proxies
-    #     # self.__set_http_proxies__(**kwargs)
-    #     zone_id = self.__get_zone_id__(name)
-    #     t_record_dict = self.__get_records_for_domain_and_type__(
+    #     # self._set_http_proxies(**kwargs)
+    #     zone_id = self._get_zone_id(name)
+    #     t_record_dict = self._get_records_for_domain_and_type(
     #         name, dns_type)
     #     for content in t_record_dict:
     #         record_id = t_record_dict[content]
     #         # delete from remote server
     #         if content not in content_list:
     #             continue
-    #         t_succ, _ = self.__delete_record_by_id__(
+    #         t_succ, _ = self._delete_record_by_id(
     #             zone_id, record_id, **kwargs)
     #         if t_succ:
-    #             print(f"Succeed to delete [{name}, {dns_type}, {content}]")
+    #             logger.info(f"Succeed to delete [{name}, {dns_type}, {content}]")
     #         else:
-    #             print(
+    #             logger.info(
     #                 f"Warnig! Failed to delete [{name}, {dns_type}, {content}]")
     #         time.sleep(0.1)
 
@@ -854,8 +845,8 @@ class CloudFlare:
         """
         for t_zone in records_dict:
             t_zone = t_zone.lower()
-            self.__init_records_for_zone__(t_zone, **kwargs)
-            zone_id = self.__get_zone_id__(t_zone)
+            self._init_records_for_zone(t_zone, **kwargs)
+            zone_id = self._get_zone_id(t_zone)
             
             dns_types = kwargs.get("dns_types")
             ipv4_addrs = kwargs.get("ipv4_addrs")
@@ -865,6 +856,8 @@ class CloudFlare:
             txt_records = kwargs.get("txt_records")
 
             has_content_filters = bool(ipv4_addrs or ipv6_addrs or cname or cname_alias or txt_records)
+
+            prefixes = list(records_dict[t_zone].keys()) if (records_dict and t_zone in records_dict and records_dict[t_zone]) else []
 
             if not prefixes:
                 sub_domains = list(self.zones[t_zone]["records"].keys())
@@ -933,15 +926,15 @@ class CloudFlare:
 
 
             for t_sub, d_type, cont, record_id in record_id_list_for_del:
-                t_succ, _, dns_type, content = self.__delete_record_by_id__(
+                t_succ, _, dns_type, content = self._delete_record_by_id(
                     zone_id, record_id, **kwargs
                 )
                 if t_succ:
-                    print(
+                    logger.info(
                         f"Succeed to delete [{t_sub}, {dns_type}, {content}]")
                 else:
-                    print(
-                        f"Warning! Failed to delete "
+                    logger.warning(
+                        f"Failed to delete "
                         f"[{t_sub}, {dns_type}, {content}]"
                     )
                 time.sleep(0.1)
@@ -958,19 +951,19 @@ class CloudFlare:
     #     """
     #     name = name.lower()
     #     dns_type = dns_type.upper()
-    #     zone_id = self.__get_zone_id__(name)
-    #     self.__init_records_for_sub_domain__(name, **kwargs)
+    #     zone_id = self._get_zone_id(name)
+    #     self._init_records_for_sub_domain(name, **kwargs)
     #     # strip and remove duplicated item
     #     content_list = [str(content).strip() for content in content_list]
     #     content_list = list(set(content_list))
     #     if dns_type == "CNAME" and len(content_list) > 1:
-    #         print(
+    #         logger.info(
     #             f"WARNING! Can't update more than one records for ({name}, {dns_type}), {
     #                 dns_type} just one record permitted!"
     #         )
     #         return
     #     # clean
-    #     t_records_dict = self.__get_records_for_domain_and_type__(
+    #     t_records_dict = self._get_records_for_domain_and_type(
     #         name, dns_type)
     #     # scan content list, find all exist records and non-exist records
     #     t_non_exist_contents = []
@@ -990,16 +983,16 @@ class CloudFlare:
     #         self.__update_record_by_id__(
     #             t_content["id"], name, dns_type, t_content, **kwargs
     #         )
-    #         print(f"Update for ({name}, {dns_type}), {t_content})")
+    #         logger.info(f"Update for ({name}, {dns_type}), {t_content})")
     #     # create non-exist records:
     #     for t_content in t_non_exist_contents:
-    #         self.__create_one_record__(name, dns_type, t_content, **kwargs)
-    #         print(f"Create ({name}, {dns_type}), {t_content})")
+    #         self._create_one_record(name, dns_type, t_content, **kwargs)
+    #         logger.info(f"Create ({name}, {dns_type}), {t_content})")
     #     # delete extra records
     #     for t_content in t_extra_records:
-    #         self.__delete_record_by_id__(
+    #         self._delete_record_by_id(
     #             zone_id, t_records_dict[t_content], **kwargs)
-    #         print(f"Delete ({name}, {dns_type}), {t_content})")
+    #         logger.info(f"Delete ({name}, {dns_type}), {t_content})")
 
     def update_records_new(self, records_dict: dict, **kwargs):
         """
@@ -1010,15 +1003,15 @@ class CloudFlare:
         """
         for t_zone in records_dict:
             t_zone = t_zone.lower()
-            zone_id = self.__get_zone_id__(t_zone)
-            self.__init_records_for_zone__(t_zone, **kwargs)
+            zone_id = self._get_zone_id(t_zone)
+            self._init_records_for_zone(t_zone, **kwargs)
             for t_prefix in records_dict[t_zone]:
                 t_new_obj = records_dict[t_zone][t_prefix]
                 t_full_domain = f"{t_prefix}.{t_zone}" if t_prefix else t_zone
                 for dns_type in t_new_obj:
                     dns_type = dns_type.upper()
                     # clean
-                    t_current_records_dict = self.__get_records_for_domain_and_type__(
+                    t_current_records_dict = self._get_records_for_domain_and_type(
                         t_zone, t_prefix, dns_type
                     )
                     # scan content list, find all exist records and non-exist records
@@ -1054,7 +1047,7 @@ class CloudFlare:
                             t_o_proxied = self.dns_records[t_record_id]['proxied']
                             if t_ttl != self.dns_records[t_record_id]['ttl'] or \
                                     t_proxied != self.dns_records[t_record_id]['proxied']:
-                                self.__update_record_by_id__(
+                                self._update_record_by_id(
                                     t_record_id,
                                     t_full_domain,
                                     dns_type,
@@ -1063,7 +1056,7 @@ class CloudFlare:
                                     proxied=t_proxied,
                                     **kwargs,
                                 )
-                                print(f"Update {t_full_domain}, {dns_type}, {t_content}, from "
+                                logger.info(f"Update {t_full_domain}, {dns_type}, {t_content}, from "
                                       f"[{t_o_ttl}, {t_o_proxied}] to [{t_ttl}, {t_proxied}]")
                     # update t_extra_records according t_non_exist_contents
                     while len(t_extra_records) > 0 and len(t_non_exist_contents) > 0:
@@ -1073,7 +1066,7 @@ class CloudFlare:
                         t_o_content = self.dns_records[t_record_id]['content']
                         t_o_ttl = self.dns_records[t_record_id]['ttl']
                         t_o_proxied = self.dns_records[t_record_id]['proxied']
-                        self.__update_record_by_id__(
+                        self._update_record_by_id(
                             t_record_id,
                             t_full_domain,
                             dns_type,
@@ -1082,7 +1075,7 @@ class CloudFlare:
                             proxied=t_n_proxied,
                             **kwargs
                         )
-                        print(f"Update {t_full_domain}, {dns_type}, from "
+                        logger.info(f"Update {t_full_domain}, {dns_type}, from "
                               f"[{t_o_content}, {t_o_ttl}, {t_o_proxied}] to "
                               f"[{t_n_content}, {t_n_ttl}, {t_n_proxied}]")
                         del t_non_exist_contents[0]
@@ -1090,13 +1083,13 @@ class CloudFlare:
                     # delete extra records
                     for t_content in t_extra_records:
                         t_record_id = t_current_records_dict[t_content]
-                        self.__delete_record_by_id__(
+                        self._delete_record_by_id(
                             zone_id, t_record_id, **kwargs)
-                        print(f"Delete [{t_full_domain}, "
+                        logger.info(f"Delete [{t_full_domain}, "
                               f"{dns_type}, {t_content}]")
                     # add for non-exist records:
                     for t_content, t_ttl, t_proxied in t_non_exist_contents:
-                        self.__create_one_record__(
+                        self._create_one_record(
                             t_full_domain,
                             dns_type,
                             t_content,
@@ -1104,7 +1097,7 @@ class CloudFlare:
                             proxied=t_proxied,
                             **kwargs,
                         )
-                        print(
+                        logger.info(
                             f"Create [{t_full_domain}, {dns_type}, {t_content}]")
 
 
@@ -1124,20 +1117,20 @@ def print_logs(t_u: list, t_c: list, t_d: list, t_k: list):
     def print_section(title, items):
         if not items:
             return
-        print(title)
+        logger.info(title)
         if isinstance(items, dict):
             for t_i, val in items.items():
                 if isinstance(t_i, (list, tuple)) and len(t_i) >= 3:
-                    print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
+                    logger.info(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
                 else:
-                    print(t_i)
-                print(val)
+                    logger.info(t_i)
+                logger.info(val)
         elif isinstance(items, (list, tuple)):
             for t_i in items:
                 if isinstance(t_i, (list, tuple)) and len(t_i) >= 3:
-                    print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
+                    logger.info(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
                 else:
-                    print(t_i)
+                    logger.info(t_i)
 
     print_section("Update for:", t_u)
     print_section("Create for:", t_c)
@@ -1172,17 +1165,6 @@ def split_content_list(content_list: list, dns_type: str = None):
         return list(dict.fromkeys(t_content_list))
     return list(set(t_content_list))
 
-
-
-def resolve_raw(raws: list):
-    t_content_list = []
-    if not raws or len(raws) == 0:
-        return t_content_list
-    for t in raws:
-        t_list = split_content_no_set(str(t))
-        t_list = [t for t in t_list if len(t) > 0]
-        t_content_list.append(t_list)
-    return list(set(t_content_list))
 
 
 def split_content(content: str):
@@ -1315,7 +1297,11 @@ options:
 
 
 def main():
-    from src import __version__
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    try:
+        from src import __version__
+    except ImportError:
+        from __init__ import __version__
     print(f"cloudflare-ddns {__version__}")
     print("  - a DDNS helper for Cloudflare.")
     print('  - create, delete or update dns record for dns type "A|AAAA|CNAME|TXT".')
@@ -1556,10 +1542,10 @@ def main():
         sys.exit(0)
     if not args.api_token or len(args.api_token) == 0:
         if not args.email or len(args.email) == 0:
-            print("No email or API token provided!")
+            logger.info("No email or API token provided!")
             sys.exit(1)
         if not args.api_key or len(args.api_key) == 0:
-            print("No API Key!")
+            logger.info("No API Key!")
             sys.exit(1)
     # add, update and delete
     t_domains_list = []
@@ -1574,7 +1560,7 @@ def main():
     t_raw_list = []
     if args.list_zone:
         action_list_zones = True
-    elif args.list_record > 0:
+    elif args.list_record:
         action_list_records = True
     elif args.update_record:
         action_update_records = True
@@ -1583,105 +1569,105 @@ def main():
     elif args.delete_record:
         action_delete_records = True
     else:
-        print("No valid cmd provided!")
+        logger.info("No valid cmd provided!")
         sys.exit(1)
     if not action_list_records:
         if (args.ipv4_addr and len(args.ipv4_addr) > 0) or (args.ipv6_addr and len(args.ipv6_addr) > 0):
             if (args.cname and len(args.cname) > 0) or (args.cname_alias and len(args.cname_alias) > 0):
-                print(
+                logger.info(
                     "Please do not use \"--cname\" or \"--cname-alias\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
                 sys.exit(1)
             if args.txt_record and len(args.txt_record) > 0:
-                print(
+                logger.info(
                     "Please do not use \"--txt\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
                 sys.exit(1)
             if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
                     (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
-                print(
+                logger.info(
                     "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
                     "or \"--raw-alias-file\" with \"--ipv4-addr\" or \"--ipv6-addr\"")
                 sys.exit(1)
             if args.zone and len(args.zone) > 0:
                 if not args.alias or len(args.alias) == 0:
-                    print(
+                    logger.info(
                         "Please use \"--alias\" with \"--zone\"")
                     sys.exit(1)
                 if args.domain and len(args.domain) > 0:
-                    print(
+                    logger.info(
                         "Please do not use \"--domain\" with \"--zone\"")
                     sys.exit(1)
             elif not args.domain or len(args.domain) == 0:
-                print(
+                logger.info(
                     "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
                 sys.exit(1)
         elif (args.cname and len(args.cname) > 0) or (args.cname_alias and len(args.cname_alias) > 0):
             if args.txt_record and len(args.txt_record) > 0:
-                print(
+                logger.info(
                     "Please do not use \"--txt\" with \"--cname\" or \"--cname-alias\"")
                 sys.exit(1)
             if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
                     (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
-                print(
+                logger.info(
                     "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
                     "or \"--raw-alias-file\" with \"--cname\" or \"--cname-alias\"")
                 sys.exit(1)
             if args.cname_alias and len(args.cname_alias) > 0:
                 if not args.zone or len(args.zone) == 0 or not args.alias or len(args.alias) == 0:
-                    print(
+                    logger.info(
                         "Please use \"--zone\", \"--alias\" with \"--cname-alias\"")
                     sys.exit(1)
                 if args.domain and len(args.domain) > 0:
-                    print(
+                    logger.info(
                         "Please do not use \"--domain\" with \"--cname-alias\"")
                     sys.exit(1)
             else:
                 if args.zone and len(args.zone) > 0:
                     if not args.alias or len(args.alias) == 0:
-                        print(
+                        logger.info(
                             "Please use \"--alias\" with \"--zone\"")
                         sys.exit(1)
                     if args.domain and len(args.domain) > 0:
-                        print(
+                        logger.info(
                             "Please do not use \"--domain\" with \"--zone\"")
                         sys.exit(1)
                 elif not args.domain or len(args.domain) == 0:
-                    print(
+                    logger.info(
                         "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
                     sys.exit(1)
         elif args.txt_record and len(args.txt_record) > 0:
             if (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
                     (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
-                print(
+                logger.info(
                     "Please do not use \"--raw\", \"--raw-alias\", \"--raw-file\" "
                     "or \"--raw-alias-file\" with \"--txt\"")
                 sys.exit(1)
             if args.zone and len(args.zone) > 0:
                 if not args.alias or len(args.alias) == 0:
-                    print(
+                    logger.info(
                         "Please use \"--alias\" with \"--zone\"")
                     sys.exit(1)
                 if args.domain and len(args.domain) > 0:
-                    print(
+                    logger.info(
                         "Please do not use \"--domain\" with \"--zone\"")
                     sys.exit(1)
             elif not args.domain or len(args.domain) == 0:
-                print(
+                logger.info(
                     "Please use \"--zone\" with \"--alias\" or just use \"--domain\"")
                 sys.exit(1)
 
         elif (args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0) or \
                 (args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0):
             if (args.alias and len(args.alias) > 0) or (args.domain and len(args.domain) > 0):
-                print(
+                logger.info(
                     "Please do not use \"--alias\" or \"--domain\" with \"--raw\", \"--raw-alias\", \"--raw-file\" or \"--raw-alias-file\"")
                 sys.exit(1)
             if not args.zone or len(args.zone) == 0:
-                print(
+                logger.info(
                     "Please use \"--zone\" with \"--raw\", \"--raw-alias\", \"--raw-file\" or \"--raw-alias-file\"")
                 sys.exit(1)
             if ((args.raw and len(args.raw) > 0) or (args.raw_file and len(args.raw_file) > 0)) and \
                     ((args.raw_alias and len(args.raw_alias) > 0) or (args.raw_alias_file and len(args.raw_alias_file) > 0)):
-                print(
+                logger.info(
                     "Please do not use \"--raw\" or \"--raw-file\" with \"--raw-alias\" or \"--raw-alias-file\" at the same time.")
                 sys.exit(1)
 
@@ -1696,10 +1682,10 @@ def main():
         t_domains_list.extend(split_content_list(args.domain))
         for t_domain in t_domains_list:
             if cf.is_zone(t_domain):
-                print(f"{t_domain} is zone! Please do not use \"-d\" with a zone.")
+                logger.info(f"{t_domain} is zone! Please do not use \"-d\" with a zone.")
                 sys.exit(1)
             if not cf.has_root_zone(t_domain):
-                print(
+                logger.info(
                     f"{t_domain} does not have root zone! Please add root zone in CloudFlare.")
                 sys.exit(1)
             t_prefix, t_zone = cf.split_domain(t_domain)
@@ -1710,13 +1696,13 @@ def main():
     # check zone
     if args.zone and len(args.zone) > 0:
         # if not args.alias or len(args.alias) == 0:
-        #     print("No alias provided!")
+        #     logger.info("No alias provided!")
         #     sys.exit(1)
         # zone list
         t_zone_list = split_content_list(args.zone)
         for t_zone in t_zone_list:
             if not cf.is_zone(t_zone):
-                print(
+                logger.info(
                     f"{t_zone} is not zone! Please provide valid zone which registered in CloudFlare.")
                 sys.exit(1)
             if t_zone not in t_records_dict:
@@ -1729,7 +1715,7 @@ def main():
     # for t_domain in t_domains_list:
     #     pass
     if len(t_records_dict) == 0:
-        print("No valid domain provided!")
+        logger.info("No valid domain provided!")
         sys.exit(1)
     # resolve ipv4
     if args.ipv4_addr and len(args.ipv4_addr) > 0:
@@ -1777,12 +1763,12 @@ def main():
                          for item in t_content_list if len(item.strip()) > 0]
                     )
             except Exception as E:
-                print(f"failed to read --raw-file {args.raw_file}")
+                logger.info(f"failed to read --raw-file {args.raw_file}")
                 raise E
         for t_raw in t_raw_list:
             t_line_list = parse_raw_line(t_raw)
             if len(t_line_list) != 5:
-                print(f"invalid raw content {t_raw}")
+                logger.info(f"invalid raw content {t_raw}")
                 sys.exit(1)
             t_prefix, t_dns_type, t_content, t_ttl, t_proxied = t_line_list
             try:
@@ -1791,7 +1777,7 @@ def main():
                 if str(t_ttl).lower() == "auto":
                     t_ttl = 1
                 else:
-                    print(f"invalid ttl {t_ttl} in raw content {t_raw}")
+                    logger.info(f"invalid ttl {t_ttl} in raw content {t_raw}")
                     sys.exit(1)
             for t_zone in t_records_dict:
                 if t_prefix not in t_records_dict[t_zone]:
@@ -1815,12 +1801,12 @@ def main():
                          for item in t_content_list if len(item.strip()) > 0]
                     )
             except Exception as E:
-                print(f"failed to read --raw-alias-file {args.raw_alias_file}")
+                logger.info(f"failed to read --raw-alias-file {args.raw_alias_file}")
                 raise E
         for t_raw in t_raw_list:
             t_line_list = parse_raw_line(t_raw)
             if len(t_line_list) != 5:
-                print(f"invalid raw content {t_raw}")
+                logger.info(f"invalid raw content {t_raw}")
                 sys.exit(1)
 
             # t_content is just prefix in --raw-alias or --raw-alias-file
@@ -1831,7 +1817,7 @@ def main():
                 if str(t_ttl).lower() == "auto":
                     t_ttl = 1
                 else:
-                    print(f"invalid ttl {t_ttl} in raw content {t_raw}")
+                    logger.info(f"invalid ttl {t_ttl} in raw content {t_raw}")
                     sys.exit(1)
             for t_zone in t_records_dict:
                 t_full_content = f"{t_content_alias}.{t_zone}"
@@ -1849,7 +1835,7 @@ def main():
             t_dns_type_list = split_content_list(args.dns_type)
             for t_dns_type in t_dns_type_list:
                 if not is_valid_dns_type(t_dns_type):
-                    print(f"invalid dns type {t_dns_type}")
+                    logger.info(f"invalid dns type {t_dns_type}")
                     sys.exit(1)
             for t_zone in t_records_dict:
                 for t_prefix in t_records_dict[t_zone]:
@@ -1883,4 +1869,4 @@ def main():
         )
 
     else:
-        print("Invalid operation!")
+        logger.info("Invalid operation!")

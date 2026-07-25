@@ -12,6 +12,7 @@ WORKDIR /app
 
 # Copy source files
 COPY src /app/src
+COPY pyproject.toml /app/
 COPY setup.py /app/
 COPY cloudflare-ddns.py /app/
 COPY requirements.txt /app/

@@ -11,9 +11,9 @@ authors = [
 description = "maintain cloudflare ddns records"
 readme = "README.md"  # Assuming you have a README.md file for the long description
 keywords = ["cloudflare", "ddns", "records"]
+license = "MIT"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",  # Example: Add your project's license
     "Operating System :: OS Independent",
 ]
 requires-python = ">=3.7"  # Example: Specify the Python versions you support

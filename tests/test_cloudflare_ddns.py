@@ -66,7 +66,7 @@ class TestCloudFlareHelperFunctions(unittest.TestCase):
 class TestCloudFlareClassMethods(unittest.TestCase):
     def setUp(self):
         # Instantiate CloudFlare with dummy zones mocked out
-        with patch.object(CloudFlare, '__init_zones__', return_value=None):
+        with patch.object(CloudFlare, '_init_zones', return_value=None):
             self.cf = CloudFlare(email="test@example.com", api_key="dummy_key")
             self.cf.zones = {
                 "example.com": {"id": "zone123"},
@@ -84,6 +84,10 @@ class TestCloudFlareClassMethods(unittest.TestCase):
 
         res2 = self.cf.split_domain("a.b.c.example.com")
         self.assertEqual(res2, ("a.b.c", "example.com"))
+
+    def test_split_domain_no_match(self):
+        res = self.cf.split_domain("not-a-zone.com")
+        self.assertEqual(res, ("", ""))
 
     def test_has_root_zone(self):
         self.assertTrue(self.cf.has_root_zone("example.com"))
