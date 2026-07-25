@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/zhfreal/cloudflare-ddns/pkg/cfclient"
@@ -40,10 +41,11 @@ func ListRecords(
 ) error {
 	hasContentFilters := len(ipv4Addrs) > 0 || len(ipv6Addrs) > 0 || cname != "" || cnameAlias != "" || len(txtRecords) > 0
 
-	// Helper to check if a slice contains a string
-	contains := func(slice []string, val string) bool {
+	// Helper to check if a slice contains a string case-insensitively
+	containsIgnoreCase := func(slice []string, val string) bool {
+		valUpper := strings.ToUpper(val)
 		for _, s := range slice {
-			if s == val {
+			if strings.ToUpper(s) == valUpper {
 				return true
 			}
 		}
@@ -102,7 +104,7 @@ func ListRecords(
 			var recordIDList []string
 			for rType, valMap := range subMap {
 				// Filter by dnsTypes if provided
-				if len(dnsTypes) > 0 && !contains(dnsTypes, rType) {
+				if len(dnsTypes) > 0 && !containsIgnoreCase(dnsTypes, rType) {
 					continue
 				}
 
@@ -111,24 +113,35 @@ func ListRecords(
 						matched := false
 						switch rType {
 						case "A":
-							if len(ipv4Addrs) > 0 && contains(ipv4Addrs, tContent) {
+							if len(ipv4Addrs) > 0 && containsIgnoreCase(ipv4Addrs, tContent) {
 								matched = true
 							}
 						case "AAAA":
-							if len(ipv6Addrs) > 0 && contains(ipv6Addrs, tContent) {
+							if len(ipv6Addrs) > 0 && containsIgnoreCase(ipv6Addrs, tContent) {
 								matched = true
 							}
 						case "CNAME":
-							if cname != "" && tContent == cname {
+							if cname != "" && strings.EqualFold(tContent, cname) {
 								matched = true
 							} else if cnameAlias != "" {
 								aliasWithZone := cnameAlias + "." + tZone
-								if tContent == cnameAlias || tContent == aliasWithZone {
+								if strings.EqualFold(tContent, cnameAlias) || strings.EqualFold(tContent, aliasWithZone) {
 									matched = true
 								}
 							}
 						case "TXT":
-							if len(txtRecords) > 0 && contains(txtRecords, tContent) {
+							if len(txtRecords) > 0 && containsIgnoreCase(txtRecords, tContent) {
+								matched = true
+							}
+						default:
+							// For other DNS record types (MX, NS, SRV, CAA, etc.), check if the content matches any filter
+							if cname != "" && strings.Contains(strings.ToLower(tContent), strings.ToLower(cname)) {
+								matched = true
+							} else if len(txtRecords) > 0 && containsIgnoreCase(txtRecords, tContent) {
+								matched = true
+							} else if len(ipv4Addrs) > 0 && containsIgnoreCase(ipv4Addrs, tContent) {
+								matched = true
+							} else if len(ipv6Addrs) > 0 && containsIgnoreCase(ipv6Addrs, tContent) {
 								matched = true
 							}
 						}
