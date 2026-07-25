@@ -18,12 +18,9 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "cloudflare-ddns",
 	Short: "cloudflare-ddns is a DDNS helper for Cloudflare",
-	Long: `cloudflare-ddns 26.07.25
-  - a DDNS helper for Cloudflare.
-  - create, delete or update dns record for dns type "A|AAAA|CNAME|TXT".`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if Cfg.Version {
-			fmt.Printf("cloudflare-ddns %s (commit %s)\n", version.Version, version.GitCommit)
+			fmt.Printf("cloudflare-ddns %s (commit: %s, built: %s)\n", version.Version, version.GitCommit, version.BuildDate)
 			os.Exit(0)
 		}
 		// If no subcommands matched and no legacy mode was intercepted, show help
@@ -32,6 +29,9 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.Long = fmt.Sprintf(`cloudflare-ddns %s (commit: %s, built: %s)
+  - a DDNS helper for Cloudflare.
+  - create, delete or update dns record for dns type "A|AAAA|CNAME|TXT".`, version.Version, version.GitCommit, version.BuildDate)
 	// Global / Persistent Flags
 	rootCmd.PersistentFlags().StringVarP(&Cfg.Email, "email", "e", "", "Email for your cloudflare account")
 	rootCmd.PersistentFlags().StringVarP(&Cfg.APIKey, "api-key", "k", "", "API Key of your cloudflare account")
