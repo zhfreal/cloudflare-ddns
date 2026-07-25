@@ -2,8 +2,10 @@ package ddns
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"os"
+	"sort"
+	"text/tabwriter"
 
 	"github.com/zhfreal/cloudflare-ddns/pkg/cfclient"
 )
@@ -15,7 +17,16 @@ func ListZones(client *cfclient.Client) {
 	}
 }
 
-// ListRecords prints filtered DNS records in JSON format
+type recordRow struct {
+	Name    string
+	Type    string
+	Content string
+	TTL     int
+	Proxied bool
+	ID      string
+}
+
+// ListRecords prints filtered DNS records in a beautiful formatted table
 func ListRecords(
 	ctx context.Context,
 	client *cfclient.Client,
@@ -49,6 +60,8 @@ func ListRecords(
 			zonesToList[z] = true
 		}
 	}
+
+	var rows []recordRow
 
 	for tZone := range zonesToList {
 		err := client.InitRecordsForZone(ctx, tZone, "")
@@ -129,18 +142,38 @@ func ListRecords(
 				}
 			}
 
-			if len(recordIDList) > 0 {
-				fmt.Printf("%s: \n", tSubDomain)
-				for _, tID := range recordIDList {
-					if rec, exists := client.DNSRecords[tID]; exists {
-						data, err := json.Marshal(rec)
-						if err == nil {
-							fmt.Println(string(data))
-						}
-					}
+			for _, tID := range recordIDList {
+				if rec, exists := client.DNSRecords[tID]; exists {
+					rows = append(rows, recordRow{
+						Name:    rec.Name,
+						Type:    string(rec.Type),
+						Content: rec.Content,
+						TTL:     int(rec.TTL),
+						Proxied: rec.Proxied,
+						ID:      rec.ID,
+					})
 				}
 			}
 		}
+	}
+
+	if len(rows) > 0 {
+		sort.Slice(rows, func(i, j int) bool {
+			if rows[i].Name != rows[j].Name {
+				return rows[i].Name < rows[j].Name
+			}
+			if rows[i].Type != rows[j].Type {
+				return rows[i].Type < rows[j].Type
+			}
+			return rows[i].Content < rows[j].Content
+		})
+
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+		fmt.Fprintln(w, "NAME\tTYPE\tCONTENT\tTTL\tPROXIED\tID")
+		for _, row := range rows {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%t\t%s\n", row.Name, row.Type, row.Content, row.TTL, row.Proxied, row.ID)
+		}
+		w.Flush()
 	}
 
 	return nil
