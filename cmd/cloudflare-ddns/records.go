@@ -278,7 +278,7 @@ var recordsListCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = ddns.ListRecords(ctx, client, desired, Cfg.DNSTypes, Cfg.IPv4Addrs, Cfg.IPv6Addrs, Cfg.CNAME, Cfg.CNAMEAlias, Cfg.TXTRecords)
+		err = ddns.ListRecords(ctx, client, desired, Cfg.DNSTypes, Cfg.IPv4Addrs, Cfg.IPv6Addrs, Cfg.CNAME, Cfg.CNAMEAlias, Cfg.TXTRecords, Cfg.IDs)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
@@ -407,7 +407,7 @@ var recordsDeleteCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = ddns.DeleteRecordsNew(ctx, client, desired, Cfg.DNSTypes, Cfg.IPv4Addrs, Cfg.IPv6Addrs, Cfg.CNAME, Cfg.CNAMEAlias, Cfg.TXTRecords)
+		err = ddns.DeleteRecordsNew(ctx, client, desired, Cfg.DNSTypes, Cfg.IPv4Addrs, Cfg.IPv6Addrs, Cfg.CNAME, Cfg.CNAMEAlias, Cfg.TXTRecords, Cfg.IDs)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)

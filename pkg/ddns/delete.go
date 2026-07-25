@@ -22,12 +22,15 @@ func DeleteRecordsNew(
 	cname string,
 	cnameAlias string,
 	txtRecords []string,
+	ids []string,
 ) error {
 	hasContentFilters := len(ipv4Addrs) > 0 || len(ipv6Addrs) > 0 || cname != "" || cnameAlias != "" || len(txtRecords) > 0
 
-	contains := func(slice []string, val string) bool {
+	// Helper to check if a slice contains a string case-insensitively
+	containsIgnoreCase := func(slice []string, val string) bool {
+		valUpper := strings.ToUpper(val)
 		for _, s := range slice {
-			if s == val {
+			if strings.ToUpper(s) == valUpper {
 				return true
 			}
 		}
@@ -106,29 +109,45 @@ func DeleteRecordsNew(
 							if hasContentFilters {
 								switch dnsType {
 								case "A":
-									if len(ipv4Addrs) > 0 && contains(ipv4Addrs, content) {
+									if len(ipv4Addrs) > 0 && containsIgnoreCase(ipv4Addrs, content) {
 										matched = true
 									}
 								case "AAAA":
-									if len(ipv6Addrs) > 0 && contains(ipv6Addrs, content) {
+									if len(ipv6Addrs) > 0 && containsIgnoreCase(ipv6Addrs, content) {
 										matched = true
 									}
 								case "CNAME":
-									if cname != "" && content == cname {
+									if cname != "" && strings.EqualFold(content, cname) {
 										matched = true
 									} else if cnameAlias != "" {
 										aliasWithZone := cnameAlias + "." + tZone
-										if content == cnameAlias || content == aliasWithZone {
+										if strings.EqualFold(content, cnameAlias) || strings.EqualFold(content, aliasWithZone) {
 											matched = true
 										}
 									}
 								case "TXT":
-									if len(txtRecords) > 0 && contains(txtRecords, content) {
+									if len(txtRecords) > 0 && containsIgnoreCase(txtRecords, content) {
+										matched = true
+									}
+								default:
+									if cname != "" && strings.Contains(strings.ToLower(content), strings.ToLower(cname)) {
+										matched = true
+									} else if len(txtRecords) > 0 && containsIgnoreCase(txtRecords, content) {
+										matched = true
+									} else if len(ipv4Addrs) > 0 && containsIgnoreCase(ipv4Addrs, content) {
+										matched = true
+									} else if len(ipv6Addrs) > 0 && containsIgnoreCase(ipv6Addrs, content) {
 										matched = true
 									}
 								}
 							} else {
 								matched = true
+							}
+
+							if matched {
+								if len(ids) > 0 && !containsIgnoreCase(ids, recordID) {
+									matched = false
+								}
 							}
 
 							if matched {
@@ -149,29 +168,45 @@ func DeleteRecordsNew(
 						if hasContentFilters {
 							switch dnsType {
 							case "A":
-								if len(ipv4Addrs) > 0 && contains(ipv4Addrs, content) {
+								if len(ipv4Addrs) > 0 && containsIgnoreCase(ipv4Addrs, content) {
 									matched = true
 								}
 							case "AAAA":
-								if len(ipv6Addrs) > 0 && contains(ipv6Addrs, content) {
+								if len(ipv6Addrs) > 0 && containsIgnoreCase(ipv6Addrs, content) {
 									matched = true
 								}
 							case "CNAME":
-								if cname != "" && content == cname {
+								if cname != "" && strings.EqualFold(content, cname) {
 									matched = true
 								} else if cnameAlias != "" {
 									aliasWithZone := cnameAlias + "." + tZone
-									if content == cnameAlias || content == aliasWithZone {
+									if strings.EqualFold(content, cnameAlias) || strings.EqualFold(content, aliasWithZone) {
 										matched = true
 									}
 								}
 							case "TXT":
-								if len(txtRecords) > 0 && contains(txtRecords, content) {
+								if len(txtRecords) > 0 && containsIgnoreCase(txtRecords, content) {
+									matched = true
+								}
+							default:
+								if cname != "" && strings.Contains(strings.ToLower(content), strings.ToLower(cname)) {
+									matched = true
+								} else if len(txtRecords) > 0 && containsIgnoreCase(txtRecords, content) {
+									matched = true
+								} else if len(ipv4Addrs) > 0 && containsIgnoreCase(ipv4Addrs, content) {
+									matched = true
+								} else if len(ipv6Addrs) > 0 && containsIgnoreCase(ipv6Addrs, content) {
 									matched = true
 								}
 							}
 						} else {
 							matched = true
+						}
+
+						if matched {
+							if len(ids) > 0 && !containsIgnoreCase(ids, recordID) {
+								matched = false
+							}
 						}
 
 						if matched {
@@ -193,8 +228,8 @@ func DeleteRecordsNew(
 			}
 			_, err := client.DeleteDNSRecord(ctx, item.recordID, delParams)
 			if err != nil {
-				fmt.Printf("Failed to delete [%s, %s, %s]\n", item.subDomain, item.dnsType, item.content)
-				return err
+				return fmt.Errorf("Failed to delete record ID %s on %s (%s, %s): %w",
+					item.recordID, item.subDomain, item.dnsType, item.content, err)
 			}
 
 			// Clean cache

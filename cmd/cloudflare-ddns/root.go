@@ -60,6 +60,7 @@ Legacy Flags (Automatic Routing):
 	rootCmd.PersistentFlags().StringVar(&Cfg.CNAMEAlias, "cname-alias", "", "alias of CNAME content")
 	rootCmd.PersistentFlags().StringSliceVarP(&Cfg.TXTRecords, "txt", "x", nil, "TXT record for action")
 	rootCmd.PersistentFlags().StringSliceVar(&Cfg.DNSTypes, "dns-type", nil, "dns type for delete/list")
+	rootCmd.PersistentFlags().StringSliceVar(&Cfg.IDs, "id", nil, "specific record ID for delete/list (can be provided multiple times)")
 	rootCmd.PersistentFlags().IntVarP(&Cfg.TTL, "ttl", "t", 60, "ttl for record")
 
 	// Custom Str2Bool pflag value for --proxied

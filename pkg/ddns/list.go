@@ -38,6 +38,7 @@ func ListRecords(
 	cname string,
 	cnameAlias string,
 	txtRecords []string,
+	ids []string,
 ) error {
 	hasContentFilters := len(ipv4Addrs) > 0 || len(ipv6Addrs) > 0 || cname != "" || cnameAlias != "" || len(txtRecords) > 0
 
@@ -156,6 +157,9 @@ func ListRecords(
 			}
 
 			for _, tID := range recordIDList {
+				if len(ids) > 0 && !containsIgnoreCase(ids, tID) {
+					continue
+				}
 				if rec, exists := client.DNSRecords[tID]; exists {
 					rows = append(rows, recordRow{
 						Name:    rec.Name,

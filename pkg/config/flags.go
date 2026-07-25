@@ -53,6 +53,7 @@ type Config struct {
 	CNAMEAlias   string
 	TXTRecords   []string
 	DNSTypes     []string
+	IDs          []string
 	TTL          int
 	Proxied      bool
 	Raws         []string
