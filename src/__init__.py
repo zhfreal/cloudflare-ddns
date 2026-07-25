@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # cython: language_level=3
 
-__version__ = "26.07.03.001"
+__version__ = "26.07.25"
 
 
