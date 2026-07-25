@@ -60,6 +60,22 @@ ttl: 60
 proxied: false
 ```
 
+### Authentication Methods
+
+You must configure **one** of the following authentication methods:
+
+#### Method A: API Token (Recommended)
+- **Token Auth** only requires the API Token (the email address is NOT needed).
+- **CLI Flag**: `--api-token "<token>"`
+- **Environment Variable**: `CLOUDFLARE_API_TOKEN` (or `CF_API_TOKEN`)
+- **YAML Config**: `api_token: "<token>"`
+
+#### Method B: Global API Key (Legacy)
+- **API Key Auth** requires both your account email and the Global API Key.
+- **CLI Flags**: `--email "<email>" --api-key "<key>"`
+- **Environment Variables**: `CLOUDFLARE_EMAIL` and `CLOUDFLARE_API_KEY`
+- **YAML Config**: `email: "<email>"` and `api_key: "<key>"`
+
 ---
 
 ## Command Structure & Routing

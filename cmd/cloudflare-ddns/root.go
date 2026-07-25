@@ -48,9 +48,9 @@ Legacy Flags (Automatic Routing):
   --update-record / --update-records   Routed to 'records update'
   --delete-record / --delete-records   Routed to 'records delete'`, version.Version, version.GitCommit, version.BuildDate)
 	// Global / Persistent Flags
-	rootCmd.PersistentFlags().StringVarP(&Cfg.Email, "email", "e", "", "Email for your cloudflare account")
-	rootCmd.PersistentFlags().StringVarP(&Cfg.APIKey, "api-key", "k", "", "API Key of your cloudflare account")
-	rootCmd.PersistentFlags().StringVar(&Cfg.APIToken, "api-token", "", "API Token for Cloudflare with \"Authorization: Bearer\" authentication")
+	rootCmd.PersistentFlags().StringVarP(&Cfg.Email, "email", "e", "", "Email address for Cloudflare account (required for API Key auth)")
+	rootCmd.PersistentFlags().StringVarP(&Cfg.APIKey, "api-key", "k", "", "Global API Key of Cloudflare account (requires email)")
+	rootCmd.PersistentFlags().StringVar(&Cfg.APIToken, "api-token", "", "API Token for Cloudflare (recommended; Bearer auth, does not require email)")
 	rootCmd.PersistentFlags().StringSliceVarP(&Cfg.Zones, "zone", "z", nil, "root domain, zone in cloudflare")
 	rootCmd.PersistentFlags().StringSliceVarP(&Cfg.Domains, "domain", "d", nil, "subdomain in cloudflare")
 	rootCmd.PersistentFlags().StringSliceVarP(&Cfg.Aliases, "alias", "a", nil, "alias of domain")
