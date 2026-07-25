@@ -17,7 +17,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "cloudflare-ddns",
-	Short: "cloudflare-ddns is a DDNS helper for Cloudflare",
+	Short: "cloudflare-ddns is a DDNS helper for Cloudflare using nested subcommands or legacy flags",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if Cfg.Version {
 			fmt.Printf("cloudflare-ddns %s (commit: %s, built: %s)\n", version.Version, version.GitCommit, version.BuildDate)
@@ -30,8 +30,23 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Long = fmt.Sprintf(`cloudflare-ddns %s (commit: %s, built: %s)
-  - a DDNS helper for Cloudflare.
-  - create, delete or update dns record for dns type "A|AAAA|CNAME|TXT".`, version.Version, version.GitCommit, version.BuildDate)
+  - A Dynamic DNS and DNS record helper for Cloudflare.
+  - Supports modern Go-style nested subcommands (zones, records) and flat aliases.
+  - Retains 100%% compatibility for legacy double-dash flags.
+
+Subcommands:
+  zones list                   List all registered zones
+  records list                 List DNS records for a zone (with optional content filters)
+  records add                  Add a new DNS record (A, AAAA, CNAME, TXT)
+  records update               Reconcile/update DNS records (DDNS engine)
+  records delete               Delete DNS records
+
+Legacy Flags (Automatic Routing):
+  --list-zone / --list-zones   Routed to 'zones list'
+  --list-record / --list-records   Routed to 'records list'
+  --add-record / --add-records   Routed to 'records add'
+  --update-record / --update-records   Routed to 'records update'
+  --delete-record / --delete-records   Routed to 'records delete'`, version.Version, version.GitCommit, version.BuildDate)
 	// Global / Persistent Flags
 	rootCmd.PersistentFlags().StringVarP(&Cfg.Email, "email", "e", "", "Email for your cloudflare account")
 	rootCmd.PersistentFlags().StringVarP(&Cfg.APIKey, "api-key", "k", "", "API Key of your cloudflare account")

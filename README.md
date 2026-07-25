@@ -62,6 +62,32 @@ proxied: false
 
 ---
 
+## Command Structure & Routing
+
+`cloudflare-ddns` supports nested Go-style subcommands:
+
+- **`zones`**:
+  - **`list`** (aliases: `list-zone`, `list-zones`): List all registered zones.
+- **`records`**:
+  - **`list`** (aliases: `list-record`, `list-records`): List DNS records for a zone (with optional content filters).
+  - **`add`** (aliases: `add-record`, `add-records`): Add a new DNS record.
+  - **`update`** (aliases: `update-record`, `update-records`): Reconcile and update DNS records (DDNS engine).
+  - **`delete`** (aliases: `delete-record`, `delete-records`): Delete DNS records.
+
+### Flat Subcommands
+You can call the aliases directly at the root level:
+```bash
+cloudflare-ddns list-zones
+cloudflare-ddns update-records --zone example.com --alias sub --ipv4 fetch
+```
+
+### Legacy Flag Routing
+All double-dash flags from the Python version are dynamically intercepted and routed. For example:
+- `cloudflare-ddns --list-zone` is routed to `zones list`
+- `cloudflare-ddns --update-record ...` is routed to `records update ...`
+
+---
+
 ## Usage Examples
 
 ### 1. Listing Zones
