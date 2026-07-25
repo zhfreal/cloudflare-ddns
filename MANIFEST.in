@@ -1,4 +1,0 @@
-include src/__init__.py
-include src/cloudflare_ddns.py
-include README.md
-include LICENSE

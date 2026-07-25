@@ -1,78 +1,36 @@
-PYTHON ?= $(shell [ -f .venv/bin/python ] && echo .venv/bin/python || echo python3)
+.PHONY: help build build-all clean test docker check
 
-.PHONY: help install install-dev clean format lint test test-cov build wheel upload
+BINARY_NAME=cloudflare-ddns
+VERSION=26.07.25
 
 help:
 	@echo "Available commands:"
-	@echo "  make install      - Install the package"
-	@echo "  make install-dev  - Install package with development dependencies"
-	@echo "  make clean        - Remove build artifacts and cache files"
-	@echo "  make format       - Format code with black and isort"
-	@echo "  make lint         - Run linters (flake8, pylint)"
-	@echo "  make test         - Run tests with pytest"
-	@echo "  make test-cov     - Run tests with coverage report"
-	@echo "  make build        - Build distribution packages (sdist and wheel)"
-	@echo "  make wheel        - Build only the wheel package"
-	@echo "  make upload       - Upload package to PyPI (requires credentials)"
+	@echo "  make build      - Build local binary"
+	@echo "  make build-all  - Cross-compile binaries for Linux, macOS, Windows"
+	@echo "  make test       - Run Go tests"
+	@echo "  make clean      - Remove build artifacts"
+	@echo "  make docker     - Build Docker container"
 
-install:
-	$(PYTHON) -m pip install -e .
+build:
+	go build -ldflags "-X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION) -X github.com/zhfreal/cloudflare-ddns/pkg/version.GitCommit=$$(git rev-parse --short HEAD 2>/dev/null || echo 'unknown') -X github.com/zhfreal/cloudflare-ddns/pkg/version.BuildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o $(BINARY_NAME) ./cmd/cloudflare-ddns
 
-install-dev:
-	$(PYTHON) -m pip install -e ".[dev]"
-	$(PYTHON) -m pip install -r requirements-dev.txt
-
-clean:
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info
-	rm -rf .pytest_cache/
-	rm -rf .mypy_cache/
-	rm -rf .tox/
-	rm -rf htmlcov/
-	rm -rf .coverage
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type f -name "*.pyd" -delete
-
-format:
-	$(PYTHON) -m black .
-	$(PYTHON) -m isort .
-
-lint:
-	$(PYTHON) -m flake8 .
-	$(PYTHON) -m pylint src
-
-type-check:
-	$(PYTHON) -m mypy src
+build-all: clean
+	mkdir -p dist
+	GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION)" -o dist/$(BINARY_NAME)-linux-amd64 ./cmd/cloudflare-ddns
+	GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION)" -o dist/$(BINARY_NAME)-linux-arm64 ./cmd/cloudflare-ddns
+	GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION)" -o dist/$(BINARY_NAME)-darwin-amd64 ./cmd/cloudflare-ddns
+	GOOS=darwin GOARCH=arm64 go build -ldflags "-X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION)" -o dist/$(BINARY_NAME)-darwin-arm64 ./cmd/cloudflare-ddns
+	GOOS=windows GOARCH=amd64 go build -ldflags "-X github.com/zhfreal/cloudflare-ddns/pkg/version.Version=$(VERSION)" -o dist/$(BINARY_NAME)-windows-amd64.exe ./cmd/cloudflare-ddns
 
 test:
-	-$(PYTHON) -m pytest
+	go test -v ./...
 
-test-cov:
-	-$(PYTHON) -m pytest --cov=. --cov-report=html --cov-report=term
+clean:
+	rm -f $(BINARY_NAME)
+	rm -rf dist/
 
-build: clean
-	@if $(PYTHON) -c "import build" >/dev/null 2>&1; then \
-		$(PYTHON) -m build; \
-	elif $(PYTHON) -m pip install build >/dev/null 2>&1; then \
-		$(PYTHON) -m build; \
-	else \
-		$(PYTHON) setup.py sdist bdist_wheel; \
-	fi
+docker:
+	docker build -t $(BINARY_NAME):latest .
 
-wheel: clean
-	@if $(PYTHON) -c "import build" >/dev/null 2>&1; then \
-		$(PYTHON) -m build --wheel; \
-	elif $(PYTHON) -m pip install build >/dev/null 2>&1; then \
-		$(PYTHON) -m build --wheel; \
-	else \
-		$(PYTHON) setup.py bdist_wheel; \
-	fi
-
-upload: build
-	$(PYTHON) -m twine upload dist/*
-
-check: format lint type-check test
+check: test build
 	@echo "All checks passed!"

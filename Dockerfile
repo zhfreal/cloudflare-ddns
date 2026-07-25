@@ -1,33 +1,11 @@
-# Base image with Python 3.10
-FROM python:3.10-alpine
-
-# fix dns
-RUN echo 'nameserver 8.8.8.8' >> /etc/resolv.conf && echo 'nameserver 8.8.4.4' >> /etc/resolv.conf
-
-# make work folder
-RUN mkdir /app
-
-# Working directory within the container
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
+COPY . .
+RUN go mod download
+RUN go build -o cloudflare-ddns ./cmd/cloudflare-ddns
 
-# Copy source files
-COPY src /app/src
-COPY pyproject.toml /app/
-COPY setup.py /app/
-COPY cloudflare-ddns.py /app/
-COPY requirements.txt /app/
-
-# Install dependencies using a separate RUN step for clarity
-RUN pip install -r /app/requirements.txt && rm /app/requirements.txt
-
-# ENTRYPOINT for flexibility in passing arguments
-# RUN pip install -e .
-
-# Set PYTHONPATH just to be sure
-ENV PYTHONPATH=.
-
-ENTRYPOINT ["python", "/app/cloudflare-ddns.py"]
-CMD []
-
-# Example usage with arguments:
-# docker run -it <image_name> arg1 arg2 arg3
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /app
+COPY --from=builder /app/cloudflare-ddns .
+ENTRYPOINT ["./cloudflare-ddns"]
