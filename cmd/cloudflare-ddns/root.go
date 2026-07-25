@@ -41,6 +41,15 @@ Subcommands:
   records update               Reconcile/update DNS records (DDNS engine)
   records delete               Delete DNS records
 
+Authentication Options (Choose one method):
+  Method A: API Token (Recommended)
+    - Only requires the API Token (email is NOT needed).
+    - Configure with: --api-token flag, CLOUDFLARE_API_TOKEN env var, or 'api_token' in config file.
+
+  Method B: Global API Key (Legacy)
+    - Requires BOTH email address and Global API Key.
+    - Configure with: --email and --api-key flags, CLOUDFLARE_EMAIL and CLOUDFLARE_API_KEY env vars, or 'email' and 'api_key' in config file.
+
 Legacy Flags (Automatic Routing):
   --list-zone / --list-zones   Routed to 'zones list'
   --list-record / --list-records   Routed to 'records list'
