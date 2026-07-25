@@ -60,14 +60,14 @@ func buildDesiredRecords(ctx context.Context, client *cfclient.Client) (cfclient
 	if len(Cfg.Zones) > 0 {
 		splitZones := config.SplitContentList(Cfg.Zones, "")
 		splitAliases := config.SplitContentList(Cfg.Aliases, "")
-		if len(splitAliases) == 0 {
-			splitAliases = []string{""}
-		}
 
 		for _, zone := range splitZones {
 			zoneLower := strings.ToLower(zone)
 			if _, ok := client.Zones[zoneLower]; !ok {
 				return nil, fmt.Errorf("%s is not zone! Please provide valid zone which registered in CloudFlare.", zone)
+			}
+			if desired[zoneLower] == nil {
+				desired[zoneLower] = make(map[string]map[cfclient.RecordType]map[string]cfclient.RecordOpts)
 			}
 			for _, alias := range splitAliases {
 				initPath(zoneLower, alias)
