@@ -169,9 +169,9 @@ func ListRecords(
 		})
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "NAME\tTYPE\tCONTENT\tTTL\tPROXIED\tID")
+		fmt.Fprintln(w, "NAME\tTYPE\tTTL\tPROXIED\tID\tCONTENT")
 		for _, row := range rows {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%t\t%s\n", row.Name, row.Type, row.Content, row.TTL, row.Proxied, row.ID)
+			fmt.Fprintf(w, "%s\t%s\t%d\t%t\t%s\t%s\n", row.Name, row.Type, row.TTL, row.Proxied, row.ID, row.Content)
 		}
 		w.Flush()
 	}
