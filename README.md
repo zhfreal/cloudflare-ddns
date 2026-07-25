@@ -104,6 +104,9 @@ cloudflare-ddns --list-zone
 # Subcommand
 cloudflare-ddns records list --zone example.com
 
+# Filter by record ID(s)
+cloudflare-ddns records list --zone example.com --id record-id-1 --id record-id-2
+
 # Legacy flag
 cloudflare-ddns --list-record --zone example.com
 ```
@@ -124,6 +127,9 @@ cloudflare-ddns records add --zone example.com --alias blog --cname ghs.google.c
 
 # Delete an existing A record
 cloudflare-ddns records delete --zone example.com --alias sub --ipv4 1.2.3.4
+
+# Delete specific record(s) by ID
+cloudflare-ddns records delete --zone example.com --id record-id-1 --id record-id-2
 ```
 
 ---
