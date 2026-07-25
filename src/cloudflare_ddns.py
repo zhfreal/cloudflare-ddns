@@ -315,8 +315,7 @@ class CloudFlare:
             )
             if not t_succ or "result" not in t_result_dict:
                 raise CloudFlareError(
-                    f"Failed to get dns records for zone: "
-                    "\"{zone_name}\", 'Got: \n{t_result_dict}'"
+                    f"Failed to get dns records for zone: \"{zone_name}\", 'Got: \n{t_result_dict}'"
                 )
             for t_record in t_result_dict["result"]:
                 # escape other than A AAAA CNAME
@@ -344,8 +343,7 @@ class CloudFlare:
                 #                               ]["values"].append(t_record)
             if "result_info" not in t_result_dict:
                 raise CloudFlareError(
-                    f"Failed to get dns records for zone: "
-                    "\"{zone_name}\", 'Got: \n{t_result_dict}'"
+                    f"Failed to get dns records for zone: \"{zone_name}\", 'Got: \n{t_result_dict}'"
                 )
             fetched += t_result_dict["result_info"]["count"]
             total_count = t_result_dict["result_info"]["total_count"]
@@ -873,7 +871,10 @@ class CloudFlare:
                 if t_sub_domain not in self.zones[t_zone]["records"]:
                     continue
                 
-                t_prefix = t_sub_domain.removesuffix(f".{t_zone}")
+                if t_sub_domain == t_zone:
+                    t_prefix = ""
+                else:
+                    t_prefix = t_sub_domain.removesuffix(f".{t_zone}").strip(".")
                 prefix_types = []
                 if prefixes and records_dict[t_zone][t_prefix]:
                     prefix_types = list(records_dict[t_zone][t_prefix].keys())
@@ -935,7 +936,7 @@ class CloudFlare:
                         f"Succeed to delete [{t_sub}, {dns_type}, {content}]")
                 else:
                     print(
-                        f"Warnig! Failed to delete "
+                        f"Warning! Failed to delete "
                         f"[{t_sub}, {dns_type}, {content}]"
                     )
                 time.sleep(0.1)
@@ -1065,7 +1066,8 @@ class CloudFlare:
                     # update t_extra_records according t_non_exist_contents
                     while len(t_extra_records) > 0 and len(t_non_exist_contents) > 0:
                         t_n_content, t_n_ttl, t_n_proxied = t_non_exist_contents[0]
-                        t_record_id = t_current_records_dict[t_content]
+                        t_o_content = t_extra_records[0]
+                        t_record_id = t_current_records_dict[t_o_content]
                         t_o_content = self.dns_records[t_record_id]['content']
                         t_o_ttl = self.dns_records[t_record_id]['ttl']
                         t_o_proxied = self.dns_records[t_record_id]['proxied']
@@ -1690,11 +1692,11 @@ def main():
         t_domains_list.extend(split_content_list(args.domain))
         for t_domain in t_domains_list:
             if cf.is_zone(t_domain):
-                print("{t_domain} is zone! Please do not use \"-d\" with a zone.")
+                print(f"{t_domain} is zone! Please do not use \"-d\" with a zone.")
                 sys.exit(1)
             if not cf.has_root_zone(t_domain):
                 print(
-                    "{t_domain} does not have root zone! Please add root zone in CloudFlare.")
+                    f"{t_domain} does not have root zone! Please add root zone in CloudFlare.")
                 sys.exit(1)
             t_prefix, t_zone = cf.split_domain(t_domain)
             if t_zone not in t_records_dict:
@@ -1711,7 +1713,7 @@ def main():
         for t_zone in t_zone_list:
             if not cf.is_zone(t_zone):
                 print(
-                    "{t_zone} is not zone! Please provide valid zone which registered in CloudFlare.")
+                    f"{t_zone} is not zone! Please provide valid zone which registered in CloudFlare.")
                 sys.exit(1)
             if t_zone not in t_records_dict:
                 t_records_dict[t_zone] = {}
@@ -1781,12 +1783,12 @@ def main():
             t_prefix, t_dns_type, t_content, t_ttl, t_proxied = t_line_list
             try:
                 t_ttl = int(t_ttl)
-            except Exception as E:
-                if t_ttl.lower() != "auto":
-                    t_ttl = -1
+            except Exception:
+                if str(t_ttl).lower() == "auto":
+                    t_ttl = 1
                 else:
                     print(f"invalid ttl {t_ttl} in raw content {t_raw}")
-                    raise E
+                    sys.exit(1)
             for t_zone in t_records_dict:
                 if t_prefix not in t_records_dict[t_zone]:
                     t_records_dict[t_zone][t_prefix] = {}
@@ -1818,22 +1820,22 @@ def main():
                 sys.exit(1)
 
             # t_content is just prefix in --raw-alias or --raw-alias-file
-            t_prefix, t_dns_type, t_content, t_ttl, t_proxied = t_line_list
-            t_content = t_content + f".{t_zone}"
+            t_prefix, t_dns_type, t_content_alias, t_ttl, t_proxied = t_line_list
             try:
                 t_ttl = int(t_ttl)
-            except Exception as E:
-                if t_ttl.lower() != "auto":
-                    t_ttl = -1
+            except Exception:
+                if str(t_ttl).lower() == "auto":
+                    t_ttl = 1
                 else:
                     print(f"invalid ttl {t_ttl} in raw content {t_raw}")
-                    raise E
+                    sys.exit(1)
             for t_zone in t_records_dict:
+                t_full_content = f"{t_content_alias}.{t_zone}"
                 if t_prefix not in t_records_dict[t_zone]:
                     t_records_dict[t_zone][t_prefix] = {}
                 if t_dns_type not in t_records_dict[t_zone][t_prefix]:
                     t_records_dict[t_zone][t_prefix][t_dns_type] = {}
-                t_records_dict[t_zone][t_prefix][t_dns_type][t_content] = (
+                t_records_dict[t_zone][t_prefix][t_dns_type][t_full_content] = (
                     t_ttl, str2bool(t_proxied))
                 # t_records_dict[t_zone][t_prefix].update(gen_content_dict(
                 #     t_dns_type, [f"{t_content}.{t_zone}"], t_ttl, str2bool(t_proxied)))
@@ -1864,7 +1866,7 @@ def main():
     elif action_update_records:
         cf.update_records_new(t_records_dict)
     elif action_add_records:
-        cf.update_records_new(t_records_dict)
+        cf.create_records_new(t_records_dict)
     elif action_delete_records:
         cf.delete_records_new(
             t_records_dict,
