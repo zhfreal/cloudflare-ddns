@@ -30,10 +30,13 @@ Documentation = "https://github.com/zhfreal/cloudflare-ddns"
 "Source Code" = "https://github.com/zhfreal/cloudflare-ddns"
 
 [project.scripts]
-cloudflare-ddns = "src.cloudflare_ddns:main"
+cloudflare-ddns = "cloudflare_ddns:main"
 
-[tool.setuptools.packages.find]
-# This section replaces find_packages()
-# By default, it finds packages in the project root.
-# If your packages are in a 'src' directory, you might need to specify:
-# where = ["src"]
+[tool.setuptools]
+py-modules = ["cloudflare_ddns"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.dynamic]
+version = {attr = "__init__.__version__"}

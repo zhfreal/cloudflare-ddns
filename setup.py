@@ -40,7 +40,8 @@ setup(
         # 'Funding': '',
         # 'Say Thanks!': '',
     },
-    packages=find_packages(),
+    package_dir={"": "src"},
+    py_modules=["cloudflare_ddns"],
     install_requires=[
         'requests >= 2.27.0',
         'gevent >= 21.8.0'
@@ -48,7 +49,7 @@ setup(
     entry_points={
         'console_scripts': [
             # 'command-name=module.submodule:function'
-            'cloudflare-ddns=src.cloudflare_ddns:main',
+            'cloudflare-ddns=cloudflare_ddns:main',
         ],
     },
 )

@@ -2,7 +2,7 @@
 FROM python:3.10-alpine
 
 # fix dns
-RUN echo 'nameserver 8.8.8.8' >> /etc/resolve.conf && echo 'nameserver 8.8.4.4' >> /etc/resolve.conf
+RUN echo 'nameserver 8.8.8.8' >> /etc/resolv.conf && echo 'nameserver 8.8.4.4' >> /etc/resolv.conf
 
 # make work folder
 RUN mkdir /app

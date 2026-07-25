@@ -388,7 +388,7 @@ class CloudFlare:
         return {}
 
     def __get_records_for_domain_and_type__(self, zone: str, prefix: str, dns_type: str):
-        full_sub_domain = f"{prefix}.{zone}"
+        full_sub_domain = f"{prefix}.{zone}" if prefix else zone
         t_records = self.__get_records_for_domain__(full_sub_domain)
         records = {}
         dns_type = dns_type.strip().upper()
@@ -400,7 +400,7 @@ class CloudFlare:
             self, zone: str, prefix: str, dns_type: str, content: str
     ):
         dns_type = dns_type.strip().upper()
-        full_sub_domain = f"{prefix}.{zone}"
+        full_sub_domain = f"{prefix}.{zone}" if prefix else zone
         t_records = self.__get_records_for_domain_and_type__(
             zone, prefix, dns_type)
         if content in t_records:
@@ -434,11 +434,11 @@ class CloudFlare:
         zone_id = self.__get_zone_id__(name)
         zone_name = self.__get_zone_name__(name)
         data = {"type": dns_type, "name": name, "content": content}
-        if kwargs.get("ttl") and kwargs["ttl"] != 1:
+        if kwargs.get("ttl") is not None and isinstance(kwargs["ttl"], int):
             data["ttl"] = kwargs["ttl"]
         else:
             data["ttl"] = self.ttl
-        if kwargs.get("proxied") and isinstance(kwargs["proxied"], bool):
+        if kwargs.get("proxied") is not None and isinstance(kwargs["proxied"], bool):
             data["proxied"] = kwargs["proxied"]
             # if record is proxied, then ttl is automatically and the value is 1
             if data["proxied"]:
@@ -502,9 +502,9 @@ class CloudFlare:
                 f"Inconsistent record {record_id} and {name}: {dns_type}, {old_content} in local cache"
             )
         data = {"type": dns_type, "name": name, "content": content}
-        if kwargs.get("ttl") and kwargs["ttl"] != 1:
+        if kwargs.get("ttl") is not None and isinstance(kwargs["ttl"], int):
             data["ttl"] = kwargs["ttl"]
-        if kwargs.get("proxied") and isinstance(kwargs["proxied"], bool):
+        if kwargs.get("proxied") is not None and isinstance(kwargs["proxied"], bool):
             data["proxied"] = kwargs["proxied"]
             # if record is proxied, then ttl is automatically and the value is 1
             if data["proxied"]:
@@ -617,8 +617,10 @@ class CloudFlare:
         :return:
         """
         domain = str(domain).strip().strip(".").strip().lower()
+        if domain in self.zones:
+            return True
         for zone in self.zones.keys():
-            if domain.endswith("." + zone):
+            if domain == zone or domain.endswith("." + zone):
                 return True
         return False
 
@@ -636,7 +638,11 @@ class CloudFlare:
         :return: tuple of (prefix, zone)
         """
         domain = str(domain).strip().strip(".").strip().lower()
+        if domain in self.zones:
+            return ("", domain)
         for zone in self.zones.keys():
+            if domain == zone:
+                return ("", zone)
             if domain.endswith("." + zone):
                 prefix = domain.removesuffix("." + zone)
                 prefix = prefix.strip(".")
@@ -678,7 +684,7 @@ class CloudFlare:
             prefixes = list(records[t_zone].keys()) if (records and t_zone in records and records[t_zone]) else []
 
             if prefixes:
-                sub_domains = [f"{pref}.{t_zone}" for pref in prefixes]
+                sub_domains = [f"{pref}.{t_zone}" if pref else t_zone for pref in prefixes]
             else:
                 sub_domains = list(self.zones[t_zone]["records"].keys())
 
@@ -774,7 +780,7 @@ class CloudFlare:
             self.__init_records_for_zone__(t_zone, **kwargs)
             self.__get_records_for_zone__(t_zone)
             for t_prefix in records_dict[t_zone]:
-                t_sub_domain = f"{t_prefix}.{t_zone}"
+                t_sub_domain = f"{t_prefix}.{t_zone}" if t_prefix else t_zone
                 for dns_type in records_dict[t_zone][t_prefix]:
                     dns_type = dns_type.upper()
                     t_records_dict = self.__get_records_for_domain_and_type__(
@@ -860,11 +866,10 @@ class CloudFlare:
 
             has_content_filters = bool(ipv4_addrs or ipv6_addrs or cname or cname_alias or txt_records)
 
-            prefixes = list(records_dict[t_zone].keys())
             if not prefixes:
                 sub_domains = list(self.zones[t_zone]["records"].keys())
             else:
-                sub_domains = [f"{pref}.{t_zone}" for pref in prefixes]
+                sub_domains = [f"{pref}.{t_zone}" if pref else t_zone for pref in prefixes]
 
             record_id_list_for_del = []
             for t_sub_domain in sub_domains:
@@ -1009,7 +1014,7 @@ class CloudFlare:
             self.__init_records_for_zone__(t_zone, **kwargs)
             for t_prefix in records_dict[t_zone]:
                 t_new_obj = records_dict[t_zone][t_prefix]
-                t_full_domain = f"{t_prefix}.{t_zone}"
+                t_full_domain = f"{t_prefix}.{t_zone}" if t_prefix else t_zone
                 for dns_type in t_new_obj:
                     dns_type = dns_type.upper()
                     # clean
@@ -1034,13 +1039,10 @@ class CloudFlare:
                         for t_content, t_record_id in t_current_records_dict.items():
                             t_record = self.dns_records[t_record_id]
                             t_name = t_record['name']
-                            # t_zone = t_record['zone_name']
                             t_type = t_record['type']
                             t_cont = t_content
-                            # t_ttl = t_record['ttl']
-                            # t_proxied = t_record['proxied']
-                            t_prefix = str(t_name).removesuffix(f".{t_zone}")
-                            if t_prefix not in records_dict[t_zone] or \
+                            t_curr_prefix = "" if t_name == t_zone else str(t_name).removesuffix(f".{t_zone}").strip(".")
+                            if t_curr_prefix not in records_dict[t_zone] or \
                                     t_type not in t_new_obj or \
                                     t_cont not in t_n_dns_obj:
                                 t_extra_records.append(t_content)
@@ -1119,26 +1121,28 @@ def str2bool(v):
 
 
 def print_logs(t_u: list, t_c: list, t_d: list, t_k: list):
-    if len(t_u) > 0:
-        print("Update for:")
-        for t_i in t_u:
-            print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
-            print(t_u[t_i])
-    if len(t_c) > 0:
-        print("Create for:")
-        for t_i in t_c:
-            print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
-            print(t_c[t_i])
-    if len(t_d) > 0:
-        print("Delete for:")
-        for t_i in t_d:
-            print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
-            print(t_d[t_i])
-    if len(t_k) > 0:
-        print("Keep for:")
-        for t_i in t_k:
-            print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
-            print(t_k[t_i])
+    def print_section(title, items):
+        if not items:
+            return
+        print(title)
+        if isinstance(items, dict):
+            for t_i, val in items.items():
+                if isinstance(t_i, (list, tuple)) and len(t_i) >= 3:
+                    print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
+                else:
+                    print(t_i)
+                print(val)
+        elif isinstance(items, (list, tuple)):
+            for t_i in items:
+                if isinstance(t_i, (list, tuple)) and len(t_i) >= 3:
+                    print(f'"{t_i[0]}" - "{t_i[1]}" - "{t_i[2]}"')
+                else:
+                    print(t_i)
+
+    print_section("Update for:", t_u)
+    print_section("Create for:", t_c)
+    print_section("Delete for:", t_d)
+    print_section("Keep for:", t_k)
 
 
 def gen_content_dict(dns_type: str, content_list: list, ttl: int, proxied: bool, **kwargs):
@@ -1718,7 +1722,7 @@ def main():
             if t_zone not in t_records_dict:
                 t_records_dict[t_zone] = {}
             for t_alias in split_content_list(args.alias):
-                t_domains_list.append(f"{t_alias}.{t_zone}")
+                t_domains_list.append(f"{t_alias}.{t_zone}" if t_alias else t_zone)
                 if t_alias not in t_records_dict[t_zone]:
                     t_records_dict[t_zone][t_alias] = {}
     # # init t_records_dict
@@ -1750,7 +1754,7 @@ def main():
                 if args.cname and len(args.cname) > 0:
                     t_content = args.cname
                 else:
-                    t_content = args.cname_alias + f".{t_zone}"
+                    t_content = f"{args.cname_alias}.{t_zone}" if args.cname_alias else t_zone
                 t_records_dict[t_zone][t_prefix].update(gen_content_dict(
                     "CNAME", [t_content], args.ttl, args.proxied))
     # resolve txt
