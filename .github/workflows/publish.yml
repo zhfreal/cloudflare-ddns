@@ -1,83 +1,42 @@
-name: Build and Upload Python Package to Release
+name: Build and Upload Go Binaries to Release
 
 # Controls when the workflow will run
 on:
   release:
-    types: [published] # Trigger workflow when a release is published (this includes pre-releases marked as published)
-    # You could also use `types: [created]` if you prefer it to trigger slightly earlier,
-    # but 'published' ensures the release page exists and is ready for assets.
+    types: [published] # Trigger workflow when a release is published
 
 # Grant permissions to write contents (needed to upload release assets)
 permissions:
   contents: write
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   build_and_upload:
-    name: Build Wheel and Upload to Release
-    runs-on: ubuntu-latest # Use the latest Ubuntu runner
+    name: Build Go Binaries and Upload to Release
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        # Check out the specific Git ref (tag or commit) associated with the release
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }} # Ensures you build the code corresponding to the release tag
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: '3.10' # Choose the Python version for building. Match your project needs.
+          go-version: '1.26.5'
 
-      - name: Install build dependencies
+      - name: Install UPX
+        run: sudo apt-get update && sudo apt-get install -y upx-ucl
+
+      - name: Build Go Binaries
         run: |
-          python -m pip install --upgrade pip
-          pip install build wheel # Install 'build' (recommended) and 'wheel'
+          VERSION=${{ github.event.release.tag_name }} make build-all
 
-      - name: Build wheel and sdist
-        run: python -m build # This command builds both sdist and wheel into the dist/ directory
-
-      - name: List built artifacts # Optional: Verify the files were created
+      - name: List built artifacts
         run: ls -l dist/
 
-      # Add steps to get the exact filenames
-      - name: Get Wheel Filename
-        id: get_wheel # Give this step an ID to reference its outputs
+      - name: Upload Release Assets
         run: |
-          # Find the .whl file (assumes only one) and set it as an output
-          FILE_PATH=$(ls dist/*.whl)
-          echo "path=$FILE_PATH" >> $GITHUB_OUTPUT
-          echo "name=$(basename $FILE_PATH)" >> $GITHUB_OUTPUT
-
-      - name: Get Sdist Filename
-        id: get_sdist # Give this step an ID
-        run: |
-          # Find the .tar.gz file (assumes only one) and set it as an output
-          FILE_PATH=$(ls dist/*.tar.gz)
-          echo "path=$FILE_PATH" >> $GITHUB_OUTPUT
-          echo "name=$(basename $FILE_PATH)" >> $GITHUB_OUTPUT
-
-      # Use the exact filenames found in the previous steps for uploading
-      - name: Upload Wheel Asset
-        uses: actions/upload-release-asset@v1
+          gh release upload ${{ github.event.release.tag_name }} dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          # Use the output 'path' from the get_wheel step
-          asset_path: ${{ steps.get_wheel.outputs.path }}
-          # Use the output 'name' from the get_wheel step
-          asset_name: ${{ steps.get_wheel.outputs.name }}
-          asset_content_type: application/zip # Correct MIME type for wheel
-
-      - name: Upload Source Distribution Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          # Use the output 'path' from the get_sdist step
-          asset_path: ${{ steps.get_sdist.outputs.path }}
-          # Use the output 'name' from the get_sdist step
-          asset_name: ${{ steps.get_sdist.outputs.name }}
-          asset_content_type: application/gzip # Correct MIME type for tar.gz
