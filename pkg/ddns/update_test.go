@@ -4,89 +4,72 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cloudflare/cloudflare-go/v7/dns"
-	"github.com/cloudflare/cloudflare-go/v7/zones"
 	"github.com/zhfreal/cloudflare-ddns/pkg/cfclient"
 )
 
 type mockCloudflareAPI struct {
-	Zones   []zones.Zone
-	Records []dns.RecordResponse
+	Zones   []cfclient.Zone
+	Records []cfclient.DNSRecord
 
-	Created []dns.RecordNewParams
+	Created []cfclient.DNSRecord
 	Updated []struct {
 		ID     string
-		Params dns.RecordUpdateParams
+		Record cfclient.DNSRecord
 	}
 	Deleted []string
 }
 
-func (m *mockCloudflareAPI) ListZones(ctx context.Context) ([]zones.Zone, error) {
+func (m *mockCloudflareAPI) ListZones(ctx context.Context) ([]cfclient.Zone, error) {
 	return m.Zones, nil
 }
 
-func (m *mockCloudflareAPI) ListDNSRecords(ctx context.Context, zoneID string, domainFilter string) ([]dns.RecordResponse, error) {
+func (m *mockCloudflareAPI) ListDNSRecords(ctx context.Context, zoneID string, domainFilter string) ([]cfclient.DNSRecord, error) {
 	return m.Records, nil
 }
 
-func (m *mockCloudflareAPI) CreateDNSRecord(ctx context.Context, params dns.RecordNewParams) (*dns.RecordResponse, error) {
-	m.Created = append(m.Created, params)
-	bodyVal, _ := params.Body.(dns.RecordNewParamsBody)
-	return &dns.RecordResponse{
-		ID:      "new_id",
-		Name:    bodyVal.Name.Value,
-		Type:    dns.RecordResponseType(bodyVal.Type.Value),
-		Content: bodyVal.Content.Value,
-		TTL:     bodyVal.TTL.Value,
-		Proxied: bodyVal.Proxied.Value,
-	}, nil
+func (m *mockCloudflareAPI) CreateDNSRecord(ctx context.Context, zoneID string, record cfclient.DNSRecord) (*cfclient.DNSRecord, error) {
+	m.Created = append(m.Created, record)
+	record.ID = "new_id"
+	return &record, nil
 }
 
-func (m *mockCloudflareAPI) UpdateDNSRecord(ctx context.Context, recordID string, params dns.RecordUpdateParams) (*dns.RecordResponse, error) {
+func (m *mockCloudflareAPI) UpdateDNSRecord(ctx context.Context, zoneID string, recordID string, record cfclient.DNSRecord) (*cfclient.DNSRecord, error) {
 	m.Updated = append(m.Updated, struct {
 		ID     string
-		Params dns.RecordUpdateParams
-	}{recordID, params})
-
-	bodyVal, _ := params.Body.(dns.RecordUpdateParamsBody)
-	return &dns.RecordResponse{
-		ID:      recordID,
-		Name:    bodyVal.Name.Value,
-		Type:    dns.RecordResponseType(bodyVal.Type.Value),
-		Content: bodyVal.Content.Value,
-		TTL:     bodyVal.TTL.Value,
-		Proxied: bodyVal.Proxied.Value,
-	}, nil
+		Record cfclient.DNSRecord
+	}{recordID, record})
+	record.ID = recordID
+	return &record, nil
 }
 
-func (m *mockCloudflareAPI) DeleteDNSRecord(ctx context.Context, recordID string, params dns.RecordDeleteParams) (*dns.RecordDeleteResponse, error) {
+func (m *mockCloudflareAPI) DeleteDNSRecord(ctx context.Context, zoneID string, recordID string) (*cfclient.DNSRecordDeleteResponse, error) {
 	m.Deleted = append(m.Deleted, recordID)
-	return &dns.RecordDeleteResponse{
+	return &cfclient.DNSRecordDeleteResponse{
 		ID: recordID,
 	}, nil
 }
 
 func TestUpdateReconciliation(t *testing.T) {
 	mockAPI := &mockCloudflareAPI{
-		Zones: []zones.Zone{
+		Zones: []cfclient.Zone{
 			{ID: "zone123", Name: "example.com"},
 		},
-		Records: []dns.RecordResponse{
+		Records: []cfclient.DNSRecord{
 			// An extra record on sub.example.com that should be re-purposed
-			{ID: "rec1", Name: "sub.example.com", Type: dns.RecordResponseTypeA, Content: "9.9.9.9", TTL: 60, Proxied: false},
+			{ID: "rec1", Name: "sub.example.com", Type: "A", Content: "9.9.9.9", TTL: 60, Proxied: false},
 			// An in-place record on sub.example.com that needs a TTL/Proxied update
-			{ID: "rec2", Name: "sub.example.com", Type: dns.RecordResponseTypeA, Content: "1.2.3.4", TTL: 60, Proxied: false},
+			{ID: "rec2", Name: "sub.example.com", Type: "A", Content: "1.2.3.4", TTL: 60, Proxied: false},
 		},
 	}
 
 	client := &cfclient.Client{
-		Zones:      map[string]*cfclient.ZoneMeta{
+		Zones: map[string]*cfclient.ZoneMeta{
 			"example.com": {
 				ID:      "zone123",
 				Records: make(map[string]map[string]map[string]string),
 			},
 		},
-		DNSRecords: make(map[string]*dns.RecordResponse),
+		DNSRecords: make(map[string]*cfclient.DNSRecord),
 	}
 	client.SetAPIClient(mockAPI)
 
@@ -109,18 +92,17 @@ func TestUpdateReconciliation(t *testing.T) {
 	// 1. Assert updates
 	updatedCount := 0
 	for _, u := range mockAPI.Updated {
-		bodyVal, _ := u.Params.Body.(dns.RecordUpdateParamsBody)
 		if u.ID == "rec2" {
 			updatedCount++
 			// TTL is overridden to 1 because Proxied is true
-			if bodyVal.TTL.Value != 1 || !bodyVal.Proxied.Value {
+			if u.Record.TTL != 1 || !u.Record.Proxied {
 				t.Errorf("expected rec2 to be updated to TTL=1 and Proxied=true")
 			}
 		}
 		if u.ID == "rec1" {
 			// 2. Assert re-purposing (rec1 updated to new content)
 			updatedCount++
-			if bodyVal.Content.Value != "5.6.7.8" || bodyVal.Name.Value != "sub.example.com" {
+			if u.Record.Content != "5.6.7.8" || u.Record.Name != "sub.example.com" {
 				t.Errorf("expected rec1 to be re-purposed to sub.example.com with 5.6.7.8")
 			}
 		}

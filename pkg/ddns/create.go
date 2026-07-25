@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go/v7"
-	"github.com/cloudflare/cloudflare-go/v7/dns"
 	"github.com/zhfreal/cloudflare-ddns/pkg/cfclient"
 )
 
@@ -48,19 +46,15 @@ func CreateRecordsNew(ctx context.Context, client *cfclient.Client, recordsDict 
 							ttlVal = 1
 						}
 
-						body := dns.RecordNewParamsBody{
-							Name:    cloudflare.F(tSubDomain),
-							Type:    cloudflare.F(dns.RecordNewParamsBodyType(dnsType)),
-							Content: cloudflare.F(tContent),
-							TTL:     cloudflare.F(dns.TTL(ttlVal)),
-							Proxied: cloudflare.F(proxiedVal),
-						}
-						params := dns.RecordNewParams{
-							ZoneID: cloudflare.F(zoneID),
-							Body:   body,
+						params := cfclient.DNSRecord{
+							Name:    tSubDomain,
+							Type:    string(dnsType),
+							Content: tContent,
+							TTL:     ttlVal,
+							Proxied: proxiedVal,
 						}
 
-						rec, err := client.CreateDNSRecord(ctx, params)
+						rec, err := client.CreateDNSRecord(ctx, zoneID, params)
 						if err != nil {
 							return fmt.Errorf("Failed to create %q records for zone: %q, %w", tSubDomain, tZone, err)
 						}
@@ -71,10 +65,10 @@ func CreateRecordsNew(ctx context.Context, client *cfclient.Client, recordsDict 
 						if zMeta.Records[rec.Name] == nil {
 							zMeta.Records[rec.Name] = make(map[string]map[string]string)
 						}
-						if zMeta.Records[rec.Name][string(rec.Type)] == nil {
-							zMeta.Records[rec.Name][string(rec.Type)] = make(map[string]string)
+						if zMeta.Records[rec.Name][rec.Type] == nil {
+							zMeta.Records[rec.Name][rec.Type] = make(map[string]string)
 						}
-						zMeta.Records[rec.Name][string(rec.Type)][rec.Content] = rec.ID
+						zMeta.Records[rec.Name][rec.Type][rec.Content] = rec.ID
 
 						fmt.Printf("Succeed to created a record (%s, %s, %s)\n", tSubDomain, dnsType, tContent)
 						time.Sleep(100 * time.Millisecond)

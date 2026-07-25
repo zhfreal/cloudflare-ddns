@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go/v7"
-	"github.com/cloudflare/cloudflare-go/v7/dns"
 	"github.com/zhfreal/cloudflare-ddns/pkg/cfclient"
 )
 
@@ -223,10 +221,7 @@ func DeleteRecordsNew(
 		}
 
 		for _, item := range recordIDListForDel {
-			delParams := dns.RecordDeleteParams{
-				ZoneID: cloudflare.F(zoneID),
-			}
-			_, err := client.DeleteDNSRecord(ctx, item.recordID, delParams)
+			_, err := client.DeleteDNSRecord(ctx, zoneID, item.recordID)
 			if err != nil {
 				return fmt.Errorf("Failed to delete record ID %s on %s (%s, %s): %w",
 					item.recordID, item.subDomain, item.dnsType, item.content, err)

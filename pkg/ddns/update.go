@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudflare/cloudflare-go/v7"
-	"github.com/cloudflare/cloudflare-go/v7/dns"
 	"github.com/zhfreal/cloudflare-ddns/pkg/cfclient"
 )
 
@@ -108,19 +106,15 @@ func UpdateRecordsNew(ctx context.Context, client *cfclient.Client, recordsDict 
 					cachedProxied := cachedRecord.Proxied
 
 					if item.ttl != cachedTTL || item.proxied != cachedProxied {
-						body := dns.RecordUpdateParamsBody{
-							Name:    cloudflare.F(tFullDomain),
-							Type:    cloudflare.F(dns.RecordUpdateParamsBodyType(dnsTypeStr)),
-							Content: cloudflare.F(item.content),
-							TTL:     cloudflare.F(dns.TTL(item.ttl)),
-							Proxied: cloudflare.F(item.proxied),
-						}
-						params := dns.RecordUpdateParams{
-							ZoneID: cloudflare.F(zoneID),
-							Body:   body,
+						params := cfclient.DNSRecord{
+							Name:    tFullDomain,
+							Type:    dnsTypeStr,
+							Content: item.content,
+							TTL:     item.ttl,
+							Proxied: item.proxied,
 						}
 
-						updatedRecord, err := client.UpdateDNSRecord(ctx, tRecordID, params)
+						updatedRecord, err := client.UpdateDNSRecord(ctx, zoneID, tRecordID, params)
 						if err != nil {
 							return fmt.Errorf("Failed to update record ID %s: %w", tRecordID, err)
 						}
@@ -144,19 +138,15 @@ func UpdateRecordsNew(ctx context.Context, client *cfclient.Client, recordsDict 
 					cachedTTL := int(cachedRecord.TTL)
 					cachedProxied := cachedRecord.Proxied
 
-					body := dns.RecordUpdateParamsBody{
-						Name:    cloudflare.F(tFullDomain),
-						Type:    cloudflare.F(dns.RecordUpdateParamsBodyType(dnsTypeStr)),
-						Content: cloudflare.F(tNewItem.content),
-						TTL:     cloudflare.F(dns.TTL(tNewItem.ttl)),
-						Proxied: cloudflare.F(tNewItem.proxied),
-					}
-					params := dns.RecordUpdateParams{
-						ZoneID: cloudflare.F(zoneID),
-						Body:   body,
+					params := cfclient.DNSRecord{
+						Name:    tFullDomain,
+						Type:    dnsTypeStr,
+						Content: tNewItem.content,
+						TTL:     tNewItem.ttl,
+						Proxied: tNewItem.proxied,
 					}
 
-					updatedRecord, err := client.UpdateDNSRecord(ctx, tRecordID, params)
+					updatedRecord, err := client.UpdateDNSRecord(ctx, zoneID, tRecordID, params)
 					if err != nil {
 						return fmt.Errorf("Failed to update extra record ID %s: %w", tRecordID, err)
 					}
@@ -177,11 +167,7 @@ func UpdateRecordsNew(ctx context.Context, client *cfclient.Client, recordsDict 
 				// Phase 5: Delete any remaining surplus extra records
 				for _, tContent := range tExtraRecords {
 					tRecordID := tCurrentRecordsDict[tContent]
-					delParams := dns.RecordDeleteParams{
-						ZoneID: cloudflare.F(zoneID),
-					}
-
-					_, err := client.DeleteDNSRecord(ctx, tRecordID, delParams)
+					_, err := client.DeleteDNSRecord(ctx, zoneID, tRecordID)
 					if err != nil {
 						return fmt.Errorf("Failed to delete extra record %s: %w", tContent, err)
 					}
@@ -196,19 +182,15 @@ func UpdateRecordsNew(ctx context.Context, client *cfclient.Client, recordsDict 
 
 				// Phase 6: Create any remaining non-existent desired records
 				for _, item := range tNonExistContents {
-					body := dns.RecordNewParamsBody{
-						Name:    cloudflare.F(tFullDomain),
-						Type:    cloudflare.F(dns.RecordNewParamsBodyType(dnsTypeStr)),
-						Content: cloudflare.F(item.content),
-						TTL:     cloudflare.F(dns.TTL(item.ttl)),
-						Proxied: cloudflare.F(item.proxied),
-					}
-					params := dns.RecordNewParams{
-						ZoneID: cloudflare.F(zoneID),
-						Body:   body,
+					params := cfclient.DNSRecord{
+						Name:    tFullDomain,
+						Type:    dnsTypeStr,
+						Content: item.content,
+						TTL:     item.ttl,
+						Proxied: item.proxied,
 					}
 
-					rec, err := client.CreateDNSRecord(ctx, params)
+					rec, err := client.CreateDNSRecord(ctx, zoneID, params)
 					if err != nil {
 						return fmt.Errorf("Failed to create record %s: %w", item.content, err)
 					}
@@ -218,10 +200,10 @@ func UpdateRecordsNew(ctx context.Context, client *cfclient.Client, recordsDict 
 					if client.Zones[tZone].Records[rec.Name] == nil {
 						client.Zones[tZone].Records[rec.Name] = make(map[string]map[string]string)
 					}
-					if client.Zones[tZone].Records[rec.Name][string(rec.Type)] == nil {
-						client.Zones[tZone].Records[rec.Name][string(rec.Type)] = make(map[string]string)
+					if client.Zones[tZone].Records[rec.Name][rec.Type] == nil {
+						client.Zones[tZone].Records[rec.Name][rec.Type] = make(map[string]string)
 					}
-					client.Zones[tZone].Records[rec.Name][string(rec.Type)][rec.Content] = rec.ID
+					client.Zones[tZone].Records[rec.Name][rec.Type][rec.Content] = rec.ID
 
 					fmt.Printf("Create [%s, %s, %s]\n", tFullDomain, dnsTypeStr, item.content)
 					time.Sleep(100 * time.Millisecond)
