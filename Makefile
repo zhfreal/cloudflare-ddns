@@ -1,7 +1,7 @@
 .PHONY: help build build-all build-release clean test docker check
 
 BINARY_NAME=cloudflare-ddns
-VERSION?=26.07.25
+VERSION?=26.10.25
 
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo 'unknown')
 BUILD_DATE=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)
