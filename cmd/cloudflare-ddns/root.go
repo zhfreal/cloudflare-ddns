@@ -73,8 +73,9 @@ Legacy Flags (Automatic Routing):
 	rootCmd.PersistentFlags().IntVarP(&Cfg.TTL, "ttl", "t", 60, "ttl for record")
 
 	// Custom Str2Bool pflag value for --proxied
-	proxiedVal := config.Str2Bool{Value: &Cfg.Proxied}
-	rootCmd.PersistentFlags().Var(&proxiedVal, "proxied", "It should be proxied")
+	proxiedVal := config.Str2Bool{Value: &Cfg.Proxied, IsSet: &Cfg.ProxiedSet}
+	flag := rootCmd.PersistentFlags().VarPF(&proxiedVal, "proxied", "", "It should be proxied")
+	flag.NoOptDefVal = "true"
 
 	rootCmd.PersistentFlags().StringSliceVarP(&Cfg.Raws, "raw", "r", nil, "raw record for operation")
 	rootCmd.PersistentFlags().StringVar(&Cfg.RawFile, "raw-file", "", "file stored raw for operation")
@@ -153,6 +154,16 @@ func InterceptAndRouteArgs() {
 			} else {
 				newArgs = append(newArgs, arg)
 			}
+		} else if arg == "--proxied" {
+			if i+1 < len(args) {
+				next := strings.ToLower(args[i+1])
+				if next == "true" || next == "false" || next == "yes" || next == "no" || next == "1" || next == "0" || next == "t" || next == "f" || next == "y" || next == "n" {
+					newArgs = append(newArgs, fmt.Sprintf("--proxied=%s", args[i+1]))
+					i++
+					continue
+				}
+			}
+			newArgs = append(newArgs, arg)
 		} else {
 			newArgs = append(newArgs, arg)
 		}

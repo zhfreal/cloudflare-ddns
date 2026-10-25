@@ -12,6 +12,7 @@ import (
 // Str2Bool implements pflag.Value to parse custom boolean flags
 type Str2Bool struct {
 	Value *bool
+	IsSet *bool
 }
 
 func (s *Str2Bool) String() string {
@@ -23,20 +24,32 @@ func (s *Str2Bool) String() string {
 
 func (s *Str2Bool) Set(v string) error {
 	val := strings.ToLower(strings.TrimSpace(v))
+	var b bool
 	if val == "" || val == "yes" || val == "true" || val == "t" || val == "y" || val == "1" {
-		t := true
-		s.Value = &t
-		return nil
+		b = true
 	} else if val == "no" || val == "false" || val == "f" || val == "n" || val == "0" {
-		f := false
-		s.Value = &f
-		return nil
+		b = false
+	} else {
+		return fmt.Errorf("Bool value expected.")
 	}
-	return fmt.Errorf("Bool value expected.")
+
+	if s.Value != nil {
+		*s.Value = b
+	} else {
+		s.Value = &b
+	}
+	if s.IsSet != nil {
+		*s.IsSet = true
+	}
+	return nil
 }
 
 func (s *Str2Bool) Type() string {
-	return "str2bool"
+	return "bool"
+}
+
+func (s *Str2Bool) IsBoolFlag() bool {
+	return true
 }
 
 // Config represents all parsed parameters
@@ -56,6 +69,7 @@ type Config struct {
 	IDs          []string
 	TTL          int
 	Proxied      bool
+	ProxiedSet   bool
 	Raws         []string
 	RawFile      string
 	RawAliases   []string
@@ -113,7 +127,7 @@ func loadYAML(path string, c *Config) {
 		if fileCfg.TTL > 0 && c.TTL == 60 { // 60 is default
 			c.TTL = fileCfg.TTL
 		}
-		if fileCfg.Proxied != nil && !c.Proxied {
+		if fileCfg.Proxied != nil && !c.ProxiedSet {
 			c.Proxied = *fileCfg.Proxied
 		}
 		if fileCfg.HTTPProxy != "" && c.HTTPProxy == "" {

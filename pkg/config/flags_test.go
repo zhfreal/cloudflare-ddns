@@ -25,7 +25,8 @@ func TestStr2Bool(t *testing.T) {
 
 	for _, tc := range tests {
 		var b bool
-		s := Str2Bool{Value: &b}
+		var isSet bool
+		s := Str2Bool{Value: &b, IsSet: &isSet}
 		err := s.Set(tc.input)
 		if tc.wantErr {
 			if err == nil {
@@ -35,9 +36,19 @@ func TestStr2Bool(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error for %s: %v", tc.input, err)
 			}
+			// Verify that underlying pointed-to bool is updated
+			if b != tc.expected {
+				t.Errorf("expected underlying bool %t, got %t for %s", tc.expected, b, tc.input)
+			}
 			if *s.Value != tc.expected {
 				t.Errorf("expected %t, got %t for %s", tc.expected, *s.Value, tc.input)
 			}
+			if !isSet {
+				t.Errorf("expected isSet to be true after Set(%s)", tc.input)
+			}
+		}
+		if !s.IsBoolFlag() {
+			t.Errorf("expected IsBoolFlag to be true")
 		}
 	}
 }
